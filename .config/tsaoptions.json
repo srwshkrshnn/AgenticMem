@@ -1,0 +1,10 @@
+{
+    "instanceUrl":  "https://msdata.visualstudio.com",
+    "TSADocumentation": "https://aka.ms/OBTSA",
+    "projectName":  "CosmosDB",
+    "areaPath":  "CosmosDB\\<Example>\\<Team>\\<AreaPath>",
+    "notificationAliases": ["adrianmi,imranrafiq,skhera,ratella,adadeyig,nakumars,joshking,abpai,prasadu,sivethe,harsudan,kevinpi,sergeyk,naveenv,harafat,debhowal"],
+    "ppe":  "false",
+    "template":  "TFSMSAzure",
+    "codebaseName":  "TFSMSAzure_AgenticMem"
+}
