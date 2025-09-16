@@ -1,6 +1,5 @@
-from rest_framework import status
+from django.http import JsonResponse
 from rest_framework.decorators import api_view
-from rest_framework.response import Response
 from .models import Memory
 from .cosmos_db import cosmos_db
 from datetime import datetime
@@ -14,9 +13,9 @@ def add_memory(request):
         )
         cosmos_item = memory.to_cosmos_item()
         created_item = cosmos_db.create_item(cosmos_item)
-        return Response(created_item, status=status.HTTP_201_CREATED)
+        return JsonResponse(created_item, status=201)
     except Exception as e:
-        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        return JsonResponse({"error": str(e)}, status=400)
 
 @api_view(['GET'])
 def retrieve_memories(request):
@@ -24,6 +23,6 @@ def retrieve_memories(request):
         items = cosmos_db.get_all_items()
         memories = [Memory.from_cosmos_item(item) for item in items]
         memories_data = [memory.to_cosmos_item() for memory in memories]
-        return Response(memories_data)
+        return JsonResponse(memories_data, safe=False)
     except Exception as e:
-        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return JsonResponse({"error": str(e)}, status=500)
