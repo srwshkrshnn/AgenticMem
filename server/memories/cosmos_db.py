@@ -1,6 +1,48 @@
 from azure.cosmos import CosmosClient, PartitionKey
 from django.conf import settings
 
+class BaseCosmosDBManager:
+    def __init__(self, container_name: str):
+        self.client = CosmosClient(
+            settings.COSMOS_DB_HOST,
+            settings.COSMOS_DB_KEY
+        )
+        self.database = self.client.get_database_client(settings.COSMOS_DB_NAME)
+        self.container = self.database.get_container_client(container_name)
+
+    def create_item(self, item):
+        return self.container.create_item(body=item)
+
+    def get_item(self, id):
+        return self.container.read_item(item=id, partition_key=id)
+
+
+class MemoriesDBManager(BaseCosmosDBManager):
+    def __init__(self):
+        super().__init__(settings.COSMOS_MEMORIES_CONTAINER)
+
+    def search_similar_memories(self, query_embedding, top_k=5):
+        query = {
+            "vector": {
+                "path": "/embedding",
+                "topK": top_k,
+                "vector": query_embedding,
+                "includeSimilarityScore": True
+            }
+        }
+        results = []
+        items = self.container.query_items(query=query, enable_cross_partition_query=True)
+        for item in items:
+            results.append(item)
+        return results
+
+class SummariesDBManager(BaseCosmosDBManager):
+    def __init__(self):
+        super().__init__(settings.COSMOS_SUMMARIES_CONTAINER)
+
+
+        
+'''
 class CosmosDBManager:
     def __init__(self):
         self.client = CosmosClient(
@@ -68,3 +110,4 @@ class CosmosDBManager:
         return results
 
 cosmos_db = CosmosDBManager()
+'''

@@ -1,7 +1,7 @@
 from django.http import JsonResponse
 from rest_framework.decorators import api_view
 from .models import Memory
-from .cosmos_db import cosmos_db
+from .cosmos_db import MemoriesDBManager,SummariesDBManager
 from .azure_openai import azure_openai
 from datetime import datetime
 
@@ -12,8 +12,9 @@ def add_memory(request):
             title=request.data.get('title'),
             content=request.data.get('content')
         )
+        memories_db = MemoriesDBManager()
         cosmos_item = memory.to_cosmos_item()
-        created_item = cosmos_db.create_item(cosmos_item)
+        created_item = memories_db.create_item(cosmos_item)
         return JsonResponse(created_item, status=201)
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=400)
@@ -27,6 +28,7 @@ def retrieve_memories(request):
         top_k: optional integer limiting number of results.
     """
     try:
+        memories_db = MemoriesDBManager()
         query_text = request.query_params.get('q')
         if not query_text:
             return JsonResponse({"error": "Missing required query parameter 'q'"}, status=400)
@@ -45,7 +47,7 @@ def retrieve_memories(request):
             except ValueError:
                 return JsonResponse({"error": "Invalid 'top_k' parameter"}, status=400)
 
-        similar = cosmos_db.search_similar_memories(embedding, top_k=top_k)
+        similar = memories_db.search_similar_memories(embedding, top_k=top_k)
         # similar is list[(Memory, similarity)]
         response = [
             {

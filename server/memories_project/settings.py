@@ -107,7 +107,8 @@ WSGI_APPLICATION = 'memories_project.wsgi.application'
 COSMOS_DB_HOST = os.getenv('COSMOS_DB_HOST')
 COSMOS_DB_KEY = os.getenv('COSMOS_DB_KEY')
 COSMOS_DB_NAME = os.getenv('COSMOS_DB_NAME', 'memories_db')
-COSMOS_DB_CONTAINER = os.getenv('COSMOS_DB_CONTAINER', 'memories')
+COSMOS_MEMORIES_CONTAINER = os.getenv("COSMOS_MEMORIES_CONTAINER", "memories")
+COSMOS_SUMMARIES_CONTAINER = os.getenv("COSMOS_SUMMARIES_CONTAINER", "summaries")
 
 # Memory search configuration
 MEMORY_SEARCH_TOP_K_DEFAULT = int(os.getenv('MEMORY_SEARCH_TOP_K_DEFAULT', '5'))
