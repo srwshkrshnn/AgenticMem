@@ -109,6 +109,9 @@ COSMOS_DB_KEY = os.getenv('COSMOS_DB_KEY')
 COSMOS_DB_NAME = os.getenv('COSMOS_DB_NAME', 'memories_db')
 COSMOS_DB_CONTAINER = os.getenv('COSMOS_DB_CONTAINER', 'memories')
 
+# Memory search configuration
+MEMORY_SEARCH_TOP_K_DEFAULT = int(os.getenv('MEMORY_SEARCH_TOP_K_DEFAULT', '5'))
+
 # Azure OpenAI Configuration
 AZURE_OPENAI_ENDPOINT = os.getenv('AZURE_OPENAI_ENDPOINT')
 AZURE_OPENAI_KEY = os.getenv('AZURE_OPENAI_KEY')

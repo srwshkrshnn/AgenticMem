@@ -19,29 +19,55 @@ class CosmosDBManager:
     def get_item(self, id):
         return self.container.read_item(item=id, partition_key=id)
 
-    def search_similar_memories(self, query_embedding, top_k=5):
-        """
-        Find similar memories using vector similarity search
-        
+    def search_similar_memories(self, query_embedding, top_k=None):
+        """Perform a vector similarity search in Cosmos DB.
+
+        Requires a vector index on the `embedding` field.
+
         Args:
-            query_embedding (list): The embedding vector to search for
-            top_k (int): Number of similar memories to return
-        
+            query_embedding (list[float]): Embedding vector of the query.
+            top_k (int): Max number of similar memories to return.
+
         Returns:
-            list: List of similar memories sorted by similarity score
+            list[tuple[Memory, float]]: (Memory, similarity_score) pairs sorted by similarity.
         """
-        all_items = self.get_all_items()
-        from .models import Memory  # Import here to avoid circular import
-        
-        # Convert items to Memory objects and calculate similarity
-        memories = [Memory.from_cosmos_item(item) for item in all_items]
-        similarities = [
-            (memory, azure_openai.calculate_similarity(query_embedding, memory.embedding))
-            for memory in memories
-        ]
-        
-        # Sort by similarity score and return top_k
-        similar_memories = sorted(similarities, key=lambda x: x[1], reverse=True)[:top_k]
-        return similar_memories
+        from .models import Memory  # Local import to avoid circular dependency
+
+        from django.conf import settings as django_settings
+        if top_k is None:
+            top_k = getattr(django_settings, 'MEMORY_SEARCH_TOP_K_DEFAULT', 5)
+        if not isinstance(top_k, int) or top_k <= 0:
+            top_k = getattr(django_settings, 'MEMORY_SEARCH_TOP_K_DEFAULT', 5)
+
+        query = f"""
+        SELECT TOP {top_k}
+            c.id,
+            c.user_id,
+            c.title,
+            c.content,
+            c.embedding,
+            VectorDistance(c.embedding, @query_vector) AS distance
+        FROM c
+        ORDER BY VectorDistance(c.embedding, @query_vector)
+        """
+
+        parameters = [{"name": "@query_vector", "value": query_embedding}]
+
+        items = list(
+            self.container.query_items(
+                query=query,
+                parameters=parameters,
+                enable_cross_partition_query=True
+            )
+        )
+
+        results = []
+        for item in items:
+            memory = Memory.from_cosmos_item(item)
+            distance = item.get("distance")
+            similarity = 0.0 if distance is None else 1.0 / (1.0 + distance)
+            results.append((memory, similarity))
+
+        return results
 
 cosmos_db = CosmosDBManager()
