@@ -10,7 +10,22 @@ retrieveBtn?.addEventListener('click', () => {
     chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
       const activeTab = tabs?.[0];
       console.log('[AgenticMem][popup] Active tab query result:', activeTab);
-      sendGetCurrentMessages(activeTab.id);
+      if (!activeTab?.id) {
+        statusEl.textContent = 'No active tab';
+        return;
+      }
+      sendGetCurrentMessages(activeTab.id)
+        .then(latestMessage => {
+          if (!latestMessage) {
+            statusEl.textContent = 'No latest messages';
+            return;
+          }
+          retrieveMemories(latestMessage);
+        })
+        .catch(err => {
+          console.error('[AgenticMem][popup] getCurrentMessages failed', err);
+          statusEl.textContent = 'Error retrieving messages';
+        });
     });
   } catch (e) {
     statusEl.textContent = 'Error (exception)';
@@ -19,14 +34,40 @@ retrieveBtn?.addEventListener('click', () => {
 });
 
 function sendGetCurrentMessages(tabId) {
-  console.log('[AgenticMem][popup] Sending GET_CURRENT_MESSAGES to tab', tabId);
-  chrome.tabs.sendMessage(tabId, { type: 'GET_CURRENT_MESSAGES', ts: Date.now() }, response => {
-    if (chrome.runtime.lastError) {
-      console.warn('[AgenticMem][popup] sendMessage error', chrome.runtime.lastError);
-      statusEl.textContent = 'Error: ' + chrome.runtime.lastError.message;
-      return;
-    }
-    statusEl.textContent = 'Got current messages';
-    console.log('[AgenticMem] get current messages response', response);
+  return new Promise((resolve, reject) => {
+    console.log('[AgenticMem][popup] Sending GET_CURRENT_MESSAGES to tab', tabId);
+    chrome.tabs.sendMessage(tabId, { type: 'GET_CURRENT_MESSAGES', ts: Date.now() }, response => {
+      if (chrome.runtime.lastError) {
+        console.warn('[AgenticMem][popup] sendMessage error', chrome.runtime.lastError);
+        return reject(chrome.runtime.lastError);
+      }
+      console.log('[AgenticMem] get current messages response', response);
+      if (!response?.ok) return resolve('');
+      const latest = (response.latestMessages || '').trim();
+      resolve(latest);
+    });
   });
+}
+
+function retrieveMemories(queryText, topK = 5) {
+  if (!queryText) {
+    statusEl.textContent = 'Empty query';
+    return;
+  }
+  statusEl.textContent = 'Retrieving memories...';
+  const params = new URLSearchParams({ q: queryText, top_k: String(topK) });
+  const url = `http://localhost:8000/api/memories/retrieve/?${params.toString()}`;
+  fetch(url, { method: 'GET' })
+    .then(r => {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json().catch(() => ({ raw: 'non-json response' }));
+    })
+    .then(data => {
+      console.log('[AgenticMem][popup] Retrieval result', data);
+      statusEl.textContent = Array.isArray(data) ? `Retrieved ${data.length} memories` : 'Retrieved';
+    })
+    .catch(err => {
+      console.error('[AgenticMem][popup] Retrieval failed', err);
+      statusEl.textContent = 'Retrieve error';
+    });
 }

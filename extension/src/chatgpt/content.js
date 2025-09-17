@@ -25,9 +25,11 @@ function updateDraft() {
 }
 
 function captureStoredDraft() {
-  if (!currentDraft) return; // nothing meaningful captured yet
-  console.log('[AgenticMem] Captured message:', currentDraft);
+  if (!currentDraft) return '';
+  const captured = currentDraft;
+  console.log('[AgenticMem] Captured message:', captured);
   currentDraft = '';
+  return captured;
 }
 
 function bindTextarea(el) {
@@ -88,12 +90,21 @@ try {
 // Listen for popup retrieve request
 try {
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-    if (msg?.type === 'RETRIEVE_MEMORIES' || msg?.type === 'GET_CURRENT_MESSAGES') {
+    if (msg?.type === 'GET_CURRENT_MESSAGES') {
       // Ensure latest draft captured before clearing
       updateDraft();
-      captureStoredDraft();
-      const lastAssistant = getLastAssistantMessage();
-      sendResponse({ ok: true, lastAssistant, type: msg?.type });
+      const draftPart = captureStoredDraft();
+      const assistantPart = getLastAssistantMessage() || '';
+      // latestMessages: concatenated draft (if any) + newline + assistant message (if any)
+      let latestMessages = '';
+      if (draftPart && assistantPart) {
+        latestMessages = draftPart + '\n' + assistantPart;
+      } else if (draftPart) {
+        latestMessages = draftPart;
+      } else if (assistantPart) {
+        latestMessages = assistantPart;
+      }
+      sendResponse({ ok: true, latestMessages, type: msg?.type });
       return true; // indicate async (though we responded sync)
     }
   });
