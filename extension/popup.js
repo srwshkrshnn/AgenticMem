@@ -65,6 +65,22 @@ function retrieveMemories(queryText, topK = 5) {
     .then(data => {
       console.log('[AgenticMem][popup] Retrieval result', data);
       statusEl.textContent = Array.isArray(data) ? `Retrieved ${data.length} memories` : 'Retrieved';
+      // Forward memories to content script to inject into conversation UI
+      try {
+        chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
+          const activeTab = tabs?.[0];
+          if (!activeTab?.id) return;
+          chrome.tabs.sendMessage(activeTab.id, { type: 'APPEND_MEMORIES', memories: data, ts: Date.now() }, resp => {
+            if (chrome.runtime.lastError) {
+              console.warn('[AgenticMem][popup] Could not send APPEND_MEMORIES', chrome.runtime.lastError);
+              return;
+            }
+            console.log('[AgenticMem][popup] APPEND_MEMORIES ack', resp);
+          });
+        });
+      } catch (e) {
+        console.warn('[AgenticMem][popup] Exception sending APPEND_MEMORIES', e);
+      }
     })
     .catch(err => {
       console.error('[AgenticMem][popup] Retrieval failed', err);

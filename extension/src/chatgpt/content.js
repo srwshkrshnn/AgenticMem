@@ -106,6 +106,47 @@ try {
       }
       sendResponse({ ok: true, latestMessages, type: msg?.type });
       return true; // indicate async (though we responded sync)
+    } else if (msg?.type === 'APPEND_MEMORIES') {
+      try {
+        const textarea = getTextarea();
+        if (!textarea) {
+          sendResponse?.({ ok: false, error: 'No textarea' });
+          return true;
+        }
+        const memories = Array.isArray(msg.memories) ? msg.memories : [];
+        if (!memories.length) {
+          sendResponse?.({ ok: false, error: 'No memories' });
+          return true;
+        }
+        // Format memories as bullet list comment-like block
+        const formatted = memories.slice(0, 10).map(mem => {
+          const title = mem.title || 'Untitled';
+          const content = mem.content || '';
+          const sim = (typeof mem.similarity === 'number') ? ` (sim ${(mem.similarity).toFixed(3)})` : '';
+          return `- ${title}: ${content}${sim}`.trim();
+        }).join('\n');
+        const prefix = '\n\n[Retrieved Memories]\n';
+        // Append to existing draft (avoid duplicate if already present with same ts marker)
+        const marker = msg.ts ? `<!--mem:${msg.ts}-->` : '';
+        const currentVal = textarea.value || textarea.textContent || '';
+        if (marker && currentVal.includes(marker)) {
+          sendResponse?.({ ok: true, skipped: 'duplicate' });
+          return true;
+        }
+        const newVal = currentVal + prefix + formatted + (marker ? `\n${marker}` : '');
+        if ('value' in textarea) {
+          textarea.value = newVal;
+        } else {
+          textarea.textContent = newVal;
+        }
+        // Trigger input event so site frameworks react
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        sendResponse?.({ ok: true, appended: memories.length });
+      } catch (e) {
+        console.warn('[AgenticMem] Failed to update textarea with memories', e);
+        sendResponse?.({ ok: false, error: String(e) });
+      }
+      return true;
     }
   });
 } catch (e) {
