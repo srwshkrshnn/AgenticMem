@@ -88,12 +88,12 @@ try {
 // Listen for popup retrieve request
 try {
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-    if (msg?.type === 'RETRIEVE_MEMORIES') {
+    if (msg?.type === 'RETRIEVE_MEMORIES' || msg?.type === 'GET_CURRENT_MESSAGES') {
       // Ensure latest draft captured before clearing
       updateDraft();
       captureStoredDraft();
       const lastAssistant = getLastAssistantMessage();
-      sendResponse({ ok: true, lastAssistant });
+      sendResponse({ ok: true, lastAssistant, type: msg?.type });
       return true; // indicate async (though we responded sync)
     }
   });

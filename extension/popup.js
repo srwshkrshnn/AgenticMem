@@ -10,7 +10,7 @@ retrieveBtn?.addEventListener('click', () => {
     chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
       const activeTab = tabs?.[0];
       console.log('[AgenticMem][popup] Active tab query result:', activeTab);
-      sendRetrieve(activeTab.id);
+      sendGetCurrentMessages(activeTab.id);
     });
   } catch (e) {
     statusEl.textContent = 'Error (exception)';
@@ -18,15 +18,15 @@ retrieveBtn?.addEventListener('click', () => {
   }
 });
 
-function sendRetrieve(tabId) {
-  console.log('[AgenticMem][popup] Sending RETRIEVE_MEMORIES to tab', tabId);
-  chrome.tabs.sendMessage(tabId, { type: 'RETRIEVE_MEMORIES', ts: Date.now() }, response => {
+function sendGetCurrentMessages(tabId) {
+  console.log('[AgenticMem][popup] Sending GET_CURRENT_MESSAGES to tab', tabId);
+  chrome.tabs.sendMessage(tabId, { type: 'GET_CURRENT_MESSAGES', ts: Date.now() }, response => {
     if (chrome.runtime.lastError) {
       console.warn('[AgenticMem][popup] sendMessage error', chrome.runtime.lastError);
       statusEl.textContent = 'Error: ' + chrome.runtime.lastError.message;
       return;
     }
-    statusEl.textContent = 'Retrieved';
-    console.log('[AgenticMem] retrieve response', response);
+    statusEl.textContent = 'Got current messages';
+    console.log('[AgenticMem] get current messages response', response);
   });
 }
