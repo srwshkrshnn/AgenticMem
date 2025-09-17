@@ -120,6 +120,7 @@ AZURE_OPENAI_VERSION = os.getenv('AZURE_OPENAI_VERSION', '2023-05-15')
 AZURE_OPENAI_DEPLOYMENT = os.getenv('AZURE_OPENAI_DEPLOYMENT')
 AZURE_OPENAI_EMBEDDING_DEPLOYMENT = os.getenv('AZURE_OPENAI_EMBEDDING_DEPLOYMENT')
 
+
 # Minimal database config for Django admin and auth
 # This is required for Django to work, but won't be used for our Memory model
 DATABASES = {

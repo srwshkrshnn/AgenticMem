@@ -61,3 +61,6 @@ class MemoriesDBManager(BaseCosmosDBManager):
 class SummariesDBManager(BaseCosmosDBManager):
     def __init__(self):
         super().__init__(settings.COSMOS_SUMMARIES_CONTAINER)
+
+    def upsert_item(self, item: dict):
+        return self.container.upsert_item(item)    
