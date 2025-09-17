@@ -10,9 +10,6 @@ class CosmosDBManager:
         self.database = self.client.get_database_client(settings.COSMOS_DB_NAME)
         self.container = self.database.get_container_client(settings.COSMOS_DB_CONTAINER)
 
-    def get_all_items(self):
-        return list(self.container.read_all_items())
-
     def create_item(self, item):
         return self.container.create_item(body=item)
 
