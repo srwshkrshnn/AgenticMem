@@ -12,7 +12,8 @@
     "type": "module"
   },
   "permissions": [
-    "storage"
+    "storage",
+    "tabs"
   ],
   "content_scripts": [
     {
@@ -21,6 +22,8 @@
     }
   ],
   "host_permissions": [
-    "https://api.mem0.ai/*"
+    "https://api.mem0.ai/*",
+    "https://chat.openai.com/*",
+    "https://chatgpt.com/*"
   ]
 }

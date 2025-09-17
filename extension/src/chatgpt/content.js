@@ -84,3 +84,19 @@ try {
   new MutationObserver(() => bindAll())
     .observe(document.documentElement || document.body, { childList: true, subtree: true });
 } catch (_) {}
+
+// Listen for popup retrieve request
+try {
+  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+    if (msg?.type === 'RETRIEVE_MEMORIES') {
+      // Ensure latest draft captured before clearing
+      updateDraft();
+      captureStoredDraft();
+      const lastAssistant = getLastAssistantMessage();
+      sendResponse({ ok: true, lastAssistant });
+      return true; // indicate async (though we responded sync)
+    }
+  });
+} catch (e) {
+  console.warn('[AgenticMem] Could not register message listener', e);
+}
