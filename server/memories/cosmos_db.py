@@ -22,18 +22,40 @@ class MemoriesDBManager(BaseCosmosDBManager):
         super().__init__(settings.COSMOS_MEMORIES_CONTAINER)
 
     def search_similar_memories(self, query_embedding, top_k=5):
-        query = {
-            "vector": {
-                "path": "/embedding",
-                "topK": top_k,
-                "vector": query_embedding,
-                "includeSimilarityScore": True
-            }
-        }
+        from .models import Memory  # local import to avoid circular dependency
+
+        if top_k is None:
+            top_k = getattr(settings, 'MEMORY_SEARCH_TOP_K_DEFAULT', 5)
+        if not isinstance(top_k, int) or top_k <= 0:
+            top_k = getattr(settings, 'MEMORY_SEARCH_TOP_K_DEFAULT', 5)
+
+        query = f"""
+        SELECT TOP {top_k}
+            c.id,
+            c.title,
+            c.content,
+            c.created_at,
+            c.updated_at,
+            c.embedding,
+            VectorDistance(c.embedding, @query_vector) AS distance
+        FROM c
+        ORDER BY VectorDistance(c.embedding, @query_vector)
+        """
+
+        parameters = [{"name": "@query_vector", "value": query_embedding}]
+
+        items = list(self.container.query_items(
+            query=query,
+            parameters=parameters,
+            enable_cross_partition_query=True
+        ))
+
         results = []
-        items = self.container.query_items(query=query, enable_cross_partition_query=True)
         for item in items:
-            results.append(item)
+            distance = item.get("distance")
+            similarity = 0.0 if distance is None else 1.0 / (1.0 + distance)
+            memory = Memory.from_cosmos_item(item)
+            results.append((memory, similarity))
         return results
 
 class SummariesDBManager(BaseCosmosDBManager):
