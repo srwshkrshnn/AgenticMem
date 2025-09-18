@@ -13,10 +13,10 @@ import uuid
 @api_view(['POST'])
 def add_memory(request):
     try:
-        memory = Memory(
-            title=request.data.get('title'),
-            content=request.data.get('content')
-        )
+        content = request.data.get('content')
+        if not content:
+            return JsonResponse({"error": "'content' is required"}, status=400)
+        memory = Memory(content=content)
         memories_db = MemoriesDBManager()
         cosmos_item = memory.to_cosmos_item()
         created_item = memories_db.create_item(cosmos_item)
@@ -52,10 +52,7 @@ def retrieve_memories(request):
                 
         similar = memories_db.search_similar_memories(embedding, top_k=top_k)
         response = [
-            {
-                **mem.to_cosmos_item(),
-                'similarity': score
-            }
+            {**mem.to_cosmos_item(), 'similarity': score}
             for mem, score in similar
         ]
         return JsonResponse(response, safe=False)
@@ -93,21 +90,6 @@ async def llm_generate_async(prompt: str, system: str = None, max_tokens: int = 
         resp.raise_for_status()
         data = resp.json()
         return data["choices"][0]["message"]["content"].strip()
-
-async def vector_search(embedding, top_k=5):
-    query = {
-        "vector": {
-            "path": "/embedding",
-            "topK": top_k,
-            "vector": embedding,
-            "includeSimilarityScore": True
-        }
-    }
-    def sync_query():
-        return list(memories_container.query_items(query=query, enable_cross_partition_query=True))
-    
-    results = await asyncio.to_thread(sync_query)
-    return results
 
 async def decide_action(candidate_text: str, neighbors: list):
     """

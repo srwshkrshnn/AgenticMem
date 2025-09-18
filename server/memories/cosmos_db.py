@@ -32,7 +32,6 @@ class MemoriesDBManager(BaseCosmosDBManager):
         query = f"""
         SELECT TOP {top_k}
             c.id,
-            c.title,
             c.content,
             c.created_at,
             c.updated_at,

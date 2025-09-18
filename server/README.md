@@ -4,7 +4,7 @@ A Django-based RESTful API service that stores and retrieves memories with vecto
 
 ## Features
 
-- Store memories with title and content
+- Store memories with content
 - Automatic vector embedding generation using Azure OpenAI
 - Semantic search capabilities using vector similarity
 - CosmosDB integration for persistent storage
@@ -81,8 +81,7 @@ The service will be available at `http://localhost:8000`
 - **Request Body**:
 ```json
 {
-    "title": "Memory Title",
-    "content": "Memory content goes here..."
+   "content": "Memory content goes here..."
 }
 ```
 - **Response**: Created memory object with ID and timestamps
@@ -104,7 +103,6 @@ The service will be available at `http://localhost:8000`
 ### Data Model
 The Memory model includes:
 - `id`: Unique identifier
-- `title`: Memory title
 - `content`: Memory content
 - `created_at`: Creation timestamp
 - `updated_at`: Last update timestamp

@@ -120,10 +120,9 @@ try {
         }
         // Format memories as bullet list comment-like block
         const formatted = memories.slice(0, 10).map(mem => {
-          const title = mem.title || 'Untitled';
           const content = mem.content || '';
           const sim = (typeof mem.similarity === 'number') ? ` (sim ${(mem.similarity).toFixed(3)})` : '';
-          return `- ${title}: ${content}${sim}`.trim();
+          return `- ${content}${sim}`.trim();
         }).join('\n');
         const prefix = '\n\n[Retrieved Memories]\n';
         // Append to existing draft (avoid duplicate if already present with same ts marker)
