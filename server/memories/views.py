@@ -10,6 +10,60 @@ from django.conf import settings
 import httpx
 import uuid
 
+# -----------------------------
+# Helper Functions
+# -----------------------------
+def filter_relevant_memories(query_text: str, memories: list):
+    """Use Azure OpenAI to keep only memories relevant to the query.
+
+    Args:
+        query_text: The user's search text.
+        memories: List of memory dicts each having at least 'id' and 'content'.
+
+    Returns:
+        Filtered list (subset) of the original memories. Returns an empty list
+        if the model deems none relevant, and returns the original list if any
+        unexpected error occurs during filtering.
+    """
+    if not memories:
+        return memories
+    try:
+        import json as _json
+        candidate_min = [
+            {"id": item.get("id"), "content": (item.get("content") or "")[:800]}
+            for item in memories
+        ]
+        relevance_prompt = (
+            "You are a relevance filter.\n" \
+            f"User query: {query_text}\n\n" \
+            "Candidate memories (JSON array):\n" \
+            f"{_json.dumps(candidate_min, ensure_ascii=False)}\n\n" \
+            "Return ONLY a JSON array (no prose) of the 'id' values of memories that might be helpful or relevant to address the user query (context expansion, answering, follow-up).\n" \
+            "If none are relevant return []. Do not include duplicates or any explanation."
+        )
+        llm_raw = azure_openai.generate_completion(relevance_prompt, max_tokens=200, temperature=0)
+        selected_ids = []
+        if llm_raw:
+            llm_text = llm_raw.strip()
+            if '[' in llm_text and ']' in llm_text:
+                start = llm_text.find('[')
+                end = llm_text.rfind(']') + 1
+                json_segment = llm_text[start:end]
+                try:
+                    parsed = _json.loads(json_segment)
+                    if isinstance(parsed, list):
+                        selected_ids = [str(x) for x in parsed]
+                except Exception:
+                    pass
+        if selected_ids:
+            return [m for m in memories if str(m.get('id')) in selected_ids]
+        else:
+            # Empty means model judged none helpful
+            return []
+    except Exception:
+        # Fail open: return original list if filtering fails unexpectedly
+        return memories
+
 @api_view(['POST'])
 def add_memory(request):
     try:
@@ -55,6 +109,8 @@ def retrieve_memories(request):
             {**mem.to_cosmos_item(), 'similarity': score}
             for mem, score in similar
         ]
+        # Apply LLM-based relevance filtering (returns only useful memories or [] on low relevance)
+        response = filter_relevant_memories(query_text, response)
         return JsonResponse(response, safe=False)
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
