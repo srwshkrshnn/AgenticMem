@@ -16,6 +16,19 @@ let currentDraft = '';
 
 function getTextarea() { return document.querySelector(TEXTAREA_SELECTOR); }
 
+function isRealTextarea(el) {
+  return el && el.tagName === 'TEXTAREA';
+}
+
+function escapeHtml(str) {
+  return (str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function updateDraft() {
   const el = getTextarea();
   if (!el) return;
@@ -158,24 +171,39 @@ try {
           return true;
         }
         // Format memories as bullet list comment-like block
-        const formatted = memories.slice(0, 10).map(mem => {
-          const content = mem.content || '';
-          const sim = (typeof mem.similarity === 'number') ? ` (sim ${(mem.similarity).toFixed(3)})` : '';
-          return `- ${content}${sim}`.trim();
-        }).join('\n');
-        const prefix = '\n\n[Retrieved Memories]\n';
-        // Append to existing draft (avoid duplicate if already present with same ts marker)
-        const marker = msg.ts ? `<!--mem:${msg.ts}-->` : '';
+        const formattedLines = memories.slice(0, 10).map((mem, idx) => {
+          const content = (mem.content || '').replace(/\s+/g, ' ').trim();
+          return `- (${idx + 1}) ${content}`.trim();
+        });
+        const formatted = formattedLines.join('\n');
+        // We will prepend exactly two blank lines before the header (handled below), so no leading newlines here
+        const prefix = '[Retrieved Context Memories]\n' +
+            'Use these ONLY as silent background context. Do NOT echo, summarize, or refer to them explicitly unless the user directly asks.\n' +
+            'In your response, focus solely on the user\'s current request. If none are relevant, ignore them.\n\n';
+        const suffix = '\n[End Context Memories]\n';
+        // Append to existing draft (marker removed per latest requirement)
         const currentVal = textarea.value || textarea.textContent || '';
-        if (marker && currentVal.includes(marker)) {
-          sendResponse?.({ ok: true, skipped: 'duplicate' });
-          return true;
+        // Ensure exactly two blank lines before injected context in textarea scenario
+        let baseVal = currentVal;
+        if (!/\n\n$/.test(baseVal)) {
+          if (/\n$/.test(baseVal)) baseVal += '\n'; else baseVal += '\n\n';
         }
-        const newVal = currentVal + prefix + formatted + (marker ? `\n${marker}` : '');
-        if ('value' in textarea) {
+        const newVal = baseVal + prefix + formatted + suffix;
+        if (isRealTextarea(textarea)) {
           textarea.value = newVal;
         } else {
-          textarea.textContent = newVal;
+          // For contentEditable, build HTML with <br>. Prepend two blank lines (two <br>). 
+          const htmlBlock = [
+            '', // first blank line
+            '', // second blank line
+            '[Retrieved Context Memories]',
+            'Use these ONLY as silent background context. Do NOT echo, summarize, or refer to them explicitly unless the user directly asks.',
+            "In your response, focus solely on the user's current request. If none are relevant, ignore them.",
+            '', // blank line before list
+            ...formattedLines,
+            '[End Context Memories]'
+          ].map(l => escapeHtml(l)).join('<br>');
+          textarea.innerHTML = escapeHtml(currentVal) + htmlBlock;
         }
         // Trigger input event so site frameworks react
         textarea.dispatchEvent(new Event('input', { bubbles: true }));
