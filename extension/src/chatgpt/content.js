@@ -32,6 +32,14 @@ function captureStoredDraft() {
   return captured;
 }
 
+// Consolidated handler for when the user sends a message (Enter or send button)
+function triggerProcessMemory() {
+  updateDraft();
+  const draft = captureStoredDraft();
+  const lastAssistant = getLastAssistantMessage();
+  sendProcessMemory(draft, lastAssistant);
+}
+
 function bindTextarea(el) {
   if (!el || el.dataset.amBound) return;
   el.dataset.amBound = '1';
@@ -39,10 +47,7 @@ function bindTextarea(el) {
   el.addEventListener('keyup', updateDraft, true);
   el.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) {
-      // Update before capture in case last keystroke not flushed
-      updateDraft();
-      captureStoredDraft();
-      getLastAssistantMessage();
+      triggerProcessMemory();
     }
   }, true);
   updateDraft();
@@ -52,9 +57,7 @@ function bindSendButton(btn) {
   if (!btn || btn.dataset.amClick) return;
   btn.dataset.amClick = '1';
   btn.addEventListener('click', () => {
-    updateDraft();
-    captureStoredDraft();
-    getLastAssistantMessage();
+    triggerProcessMemory();
   }, true);
 }
 
@@ -73,6 +76,42 @@ function getLastAssistantMessage() {
   const text = (contentEl?.textContent || '').trim();
   if (text) console.log('[AgenticMem] Last assistant message:', text);
   return text;
+}
+
+// -----------------------------
+// Memory Processing API
+// -----------------------------
+// NOTE: Django root urls.py maps the app under 'api/memories/', not 'memories/'.
+// Previous constant caused 404 (POST /memories/process-memory/ 404). Adjusted to correct path.
+const PROCESS_MEMORY_ENDPOINT = 'http://localhost:8000/api/memories/process-memory/'; // Adjust if backend served elsewhere
+
+function sendProcessMemory(draft, lastAssistant) {
+  try {
+    // Build a single message string combining last assistant + current user draft
+    const parts = [];
+    if (lastAssistant) parts.push(`Assistant: ${lastAssistant}`);
+    if (draft) parts.push(`User: ${draft}`);
+    const message = parts.join('\n');
+    if (!message) return; // nothing to send
+
+    fetch(PROCESS_MEMORY_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message // per requirement: do NOT send previous_summary for now
+        // previous_summary intentionally omitted
+      })
+    })
+      .then(r => r.json().catch(() => ({})))
+      .then(data => {
+        console.log('[AgenticMem] process-memory result', data);
+      })
+      .catch(err => {
+        console.warn('[AgenticMem] process-memory request failed', err);
+      });
+  } catch (e) {
+    console.warn('[AgenticMem] Failed to invoke process-memory', e);
+  }
 }
 
 if (document.readyState === 'loading') {

@@ -64,20 +64,27 @@ def retrieve_memories(request):
 # -----------------------------
 async def get_embedding_async(text: str):
     """Generate embedding from Azure OpenAI."""
-    url = f"{settings.AZURE_OPENAI_ENDPOINT}/openai/deployments/{settings.AZURE_OPENAI_EMBEDDING_DEPLOYMENT}/embeddings?api-version=2023-05-15"
+    base = settings.AZURE_OPENAI_ENDPOINT.rstrip('/') if settings.AZURE_OPENAI_ENDPOINT else ''
+    url = f"{base}/openai/deployments/{settings.AZURE_OPENAI_EMBEDDING_DEPLOYMENT}/embeddings?api-version={settings.AZURE_OPENAI_VERSION}"
     headers = {"Content-Type": "application/json", "api-key": settings.AZURE_OPENAI_KEY}
     payload = {"input": text}
-
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(url, headers=headers, json=payload)
-        resp.raise_for_status()
-        data = resp.json()
-        return data["data"][0]["embedding"]
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(url, headers=headers, json=payload)
+            resp.raise_for_status()
+            data = resp.json()
+            return data["data"][0]["embedding"]
+    except httpx.HTTPStatusError as he:
+        # Surface Azure specific error for easier debugging
+        raise RuntimeError(f"Embedding request failed {he.response.status_code}: {he.response.text}") from he
+    except Exception as e:
+        raise RuntimeError(f"Embedding request error: {e}") from e
 
 
 async def llm_generate_async(prompt: str, system: str = None, max_tokens: int = 256):
     """Call Azure OpenAI Chat (gpt-4o-mini)."""
-    url = f"{settings.AZURE_OPENAI_ENDPOINT}/openai/deployments/{settings.AZURE_OPENAI_DEPLOYMENT}/chat/completions?api-version=2023-05-15"
+    base = settings.AZURE_OPENAI_ENDPOINT.rstrip('/') if settings.AZURE_OPENAI_ENDPOINT else ''
+    url = f"{base}/openai/deployments/{settings.AZURE_OPENAI_DEPLOYMENT}/chat/completions?api-version={settings.AZURE_OPENAI_VERSION}"
     headers = {"Content-Type": "application/json", "api-key": settings.AZURE_OPENAI_KEY}
     messages = []
     if system:
@@ -85,11 +92,16 @@ async def llm_generate_async(prompt: str, system: str = None, max_tokens: int = 
     messages.append({"role": "user", "content": prompt})
 
     payload = {"messages": messages, "max_tokens": max_tokens}
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(url, headers=headers, json=payload)
-        resp.raise_for_status()
-        data = resp.json()
-        return data["choices"][0]["message"]["content"].strip()
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(url, headers=headers, json=payload)
+            resp.raise_for_status()
+            data = resp.json()
+            return data["choices"][0]["message"]["content"].strip()
+    except httpx.HTTPStatusError as he:
+        raise RuntimeError(f"Chat request failed {he.response.status_code}: {he.response.text}") from he
+    except Exception as e:
+        raise RuntimeError(f"Chat request error: {e}") from e
 
 async def decide_action(candidate_text: str, neighbors: list):
     """
@@ -149,7 +161,10 @@ async def process_memory(request):
                 f"New message:\n{message}\n\n"
                 f"Update the summary:"
             )
-            new_summary = await llm_generate_async(summary_prompt, system="You are a concise summarizer.")
+            try:
+                new_summary = await llm_generate_async(summary_prompt, system="You are a concise summarizer.")
+            except Exception as e:
+                return JsonResponse({"error": f"Failed to generate summary: {e}"}, status=502)
 
             summaries_db = SummariesDBManager()  
            
@@ -190,9 +205,15 @@ async def process_memory(request):
                 f"Based on:\nSummary: {new_summary}\nNew message: {message}\n\n"
                 f"Write a short candidate memory:"
             )
-            candidate_memory = await llm_generate_async(memory_prompt, system="You are a memory creator.")
+            try:
+                candidate_memory = await llm_generate_async(memory_prompt, system="You are a memory creator.")
+            except Exception as e:
+                return JsonResponse({"error": f"Failed to generate candidate memory: {e}"}, status=502)
 
-            candidate_embedding = await get_embedding_async(candidate_memory)
+            try:
+                candidate_embedding = await get_embedding_async(candidate_memory)
+            except Exception as e:
+                return JsonResponse({"error": f"Failed to embed candidate memory: {e}"}, status=502)
             memories_db = MemoriesDBManager()
             neighbors = memories_db.search_similar_memories(candidate_embedding, top_k=5)
             
@@ -221,7 +242,10 @@ async def process_memory(request):
                         f"Merge them into one improved memory:"
                     )
                     merged_text = await llm_generate_async(merged_prompt, system="You merge memories into better ones.")
-                    new_emb = await get_embedding_async(merged_text)
+                    try:
+                        new_emb = await get_embedding_async(merged_text)
+                    except Exception as e:
+                        return JsonResponse({"error": f"Failed to re-embed merged memory: {e}"}, status=502)
                     doc["content"] = merged_text
                     doc["embedding"] = new_emb
                     memories_db.upsert_item(doc)
