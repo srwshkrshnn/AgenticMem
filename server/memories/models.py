@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from .azure_openai import get_azure_openai
+from .azure_openai import azure_openai
 
 class Memory:
     def __init__(self, content, id=None, created_at=None, updated_at=None, embedding=None):
@@ -14,7 +14,7 @@ class Memory:
         """Generate embedding vector for the memory content"""
         # Use content directly now that title has been removed
         text = self.content
-        return get_azure_openai().generate_embeddings(text)
+        return azure_openai.generate_embeddings(text)
 
     @classmethod
     def from_cosmos_item(cls, item):
@@ -37,4 +37,4 @@ class Memory:
         
     def similarity_to(self, other_memory):
         """Calculate similarity with another memory"""
-        return get_azure_openai().calculate_similarity(self.embedding, other_memory.embedding)
+        return azure_openai.calculate_similarity(self.embedding, other_memory.embedding)
