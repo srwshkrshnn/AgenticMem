@@ -15,9 +15,6 @@ class BaseCosmosDBManager:
 
     def get_item(self, id):
         return self.container.read_item(item=id, partition_key=id)
-    
-    def upsert_item(self, item: dict):
-        return self.container.upsert_item(item)     
 
 
 class MemoriesDBManager(BaseCosmosDBManager):
@@ -64,4 +61,5 @@ class SummariesDBManager(BaseCosmosDBManager):
     def __init__(self):
         super().__init__(settings.COSMOS_SUMMARIES_CONTAINER)
 
-   
+    def upsert_item(self, item: dict):
+        return self.container.upsert_item(item)    

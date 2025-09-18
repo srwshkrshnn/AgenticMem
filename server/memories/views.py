@@ -115,9 +115,9 @@ def retrieve_memories(request):
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
 
-def generate_conversation_id(user_id: str) -> str:
-    return f"{user_id}-conv-{uuid.uuid4().hex[:8]}"
-
+# -----------------------------
+# Embeddings
+# -----------------------------
 async def get_embedding_async(text: str):
     """Generate embedding from Azure OpenAI."""
     base = settings.AZURE_OPENAI_ENDPOINT.rstrip('/') if settings.AZURE_OPENAI_ENDPOINT else ''
@@ -159,111 +159,57 @@ async def llm_generate_async(prompt: str, system: str = None, max_tokens: int = 
     except Exception as e:
         raise RuntimeError(f"Chat request error: {e}") from e
 
-
-def clean_text(txt: str) -> str:
-    """
-    Normalize candidate text so embeddings are comparable.
-    Removes boilerplate like **Candidate Memory:**, Memory Entry:, Summary:, etc.
-    """
-    txt = re.sub(r"\*\*.*?\*\*:?|Memory Entry:|Candidate Memory:|Summary:|Details:", "", txt)
-    return txt.strip()
-
-
-async def decide_action(candidate_text: str, neighbors: list,
-                        threshold_add=0.45, threshold_update=0.65,
-                        threshold_noop=0.85):
+async def decide_action(candidate_text: str, neighbors: list):
     """
     Decide whether to ADD, UPDATE, DELETE, or NO-OP.
-    Uses thresholds for similarity, and LLM to decide UPDATE vs DELETE/CONTRADICTS_EXISTING.
     """
-    candidate_text = clean_text(candidate_text)
-
-    print("\n=== DECISION DEBUG ===")
-    print(f"Candidate: {candidate_text}")
-    print(f"Thresholds -> ADD<{threshold_add}, UPDATE<{threshold_update}, NO-OP>{threshold_noop}")
-
     if not neighbors:
-        print("No neighbors found -> Action: ADD\n")
         return "ADD", None
 
-    # Normalize neighbors into (memory, score) tuples
-    normalized = []
-    for n in neighbors:
-        if isinstance(n, tuple) and len(n) == 2:
-            normalized.append(n)
-        elif isinstance(n, dict):
-            mem_obj = type("Memory", (), {})()
-            mem_obj.id = n.get("id")
-            mem_obj.content = n.get("content")
-            normalized.append((mem_obj, float(n.get("score", 0.0))))
-        else:
-            print(f"Skipping invalid neighbor format: {n}")
+    best_memory, best_score = max(neighbors, key=lambda x: x[1])
 
-    if not normalized:
-        print("No valid neighbors after normalization -> Action: ADD\n")
-        return "ADD", None
-
-    # Pick the best matching memory
-    best_memory, best_score = max(normalized, key=lambda x: x[1])
-    print(f"Best Match: ID={best_memory.id}, Score={best_score:.4f}")
-    print(f"Best Content: {best_memory.content}")
-
-    # Threshold-based quick decisions
-    if best_score < threshold_add:
-        decision, ref_id = "ADD", None
-    elif best_score >= threshold_noop:
-        decision, ref_id = "NO-OP", best_memory.id
-    else:
-        # Let LLM decide UPDATE or DELETE/CONTRADICTS_EXISTING
-        decision_prompt = f"""
-Existing memory:
-{best_memory.content}
+    decision_prompt = f"""
+Existing memory (best match):
+ID: {best_memory.id}
+Content: {best_memory.content}
 
 Candidate memory:
 {candidate_text}
 
 Decide ONE action:
+- ADD (create new memory)
 - UPDATE (merge into existing memory)
-- CONTRADICTS_EXISTING (new info contradicts existing, delete old memory)
+- DELETE (remove existing memory)
+- NO-OP (do nothing)
+
+Reply ONLY with the action word (ADD/UPDATE/DELETE/NO-OP).
 """
-        llm_decision = await llm_generate_async(decision_prompt, system="You are a precise memory manager.")
-        llm_decision = llm_decision.strip().upper()
+    decision = await llm_generate_async(decision_prompt, system="You are a precise memory manager.")
+    decision = decision.strip().upper()
 
-        if llm_decision in ["DELETE", "CONTRADICTS_EXISTING"]:
-            decision, ref_id = "DELETE", best_memory.id
-        else:
-            decision, ref_id = "UPDATE", best_memory.id
-
-    print(f"Final Decision: {decision} (ref_id={ref_id})")
-    print("======================\n")
-    return decision, ref_id
-
+    if decision.startswith("UPDATE"):
+        return "UPDATE", best_memory.id
+    elif decision.startswith("DELETE"):
+        return "DELETE", best_memory.id
+    elif decision.startswith("ADD"):
+        return "ADD", None
+    else:
+        return "NO-OP", None
 
 @csrf_exempt
 async def process_memory(request):
     if request.method == "POST":
         try:
-            # ✅ Parse JSON payload
+            # ✅ Parse JSON payload manually
             body = request.body
             payload = json.loads(body.decode("utf-8"))
+            
 
             message = payload.get("message", "").strip()
             if not message:
                 return JsonResponse({"error": "Please provide 'message'"}, status=400)
 
-            user_id = payload.get("userId")
-            conversation_id = payload.get("conversationId")
-            if not user_id or not conversation_id:
-                return JsonResponse({"error": "Please provide both 'userId' and 'conversationId'"}, status=400)
-
-            summaries_db = SummariesDBManager()  
-            previous_summary = ""
-            try:
-                existing_summary_doc = summaries_db.get_item(conversation_id)
-                if existing_summary_doc:
-                    previous_summary = existing_summary_doc.get("summary", "")
-            except Exception:
-                pass  
+            previous_summary = payload.get("previous_summary", "")
 
             # 1. Generate new summary
             summary_prompt = (
@@ -276,28 +222,38 @@ async def process_memory(request):
             except Exception as e:
                 return JsonResponse({"error": f"Failed to generate summary: {e}"}, status=502)
 
-            # Track last N messages
+            summaries_db = SummariesDBManager()  
+           
+            conversation_id = payload.get("conversationId", "dummy-conv")
+            user_id = payload.get("userId", "dummy-user")
+
             existing_summary_doc = None
             try:
                 existing_summary_doc = summaries_db.get_item(conversation_id)
+            
+                print(type(existing_summary_doc), existing_summary_doc)
             except Exception:
                 pass  
 
-            last_n = 5
+            last_n = 5  
             if existing_summary_doc:
+              
                 last_messages = existing_summary_doc.get("lastNMessages", [])
                 last_messages.append(message)
                 last_messages = last_messages[-last_n:]
             else:
+               
                 last_messages = [message]
 
-            summary_item = {        
-                "id": user_id,
+            summary_item = {
+                "id": conversation_id,           
+                "userId": user_id,
                 "conversationId": conversation_id,
                 "summary": new_summary,
                 "lastNMessages": last_messages,
                 "updatedAt": datetime.utcnow().isoformat()
             }
+
             summaries_db.upsert_item(summary_item)
 
             # 2. Candidate memory generation
@@ -305,11 +261,19 @@ async def process_memory(request):
                 f"Based on:\nSummary: {new_summary}\nNew message: {message}\n\n"
                 f"Write a short candidate memory:"
             )
-            candidate_memory = await llm_generate_async(memory_prompt, system="You are a memory creator.")
-            candidate_embedding = await get_embedding_async(candidate_memory)
+            try:
+                candidate_memory = await llm_generate_async(memory_prompt, system="You are a memory creator.")
+            except Exception as e:
+                return JsonResponse({"error": f"Failed to generate candidate memory: {e}"}, status=502)
 
+            try:
+                candidate_embedding = await get_embedding_async(candidate_memory)
+            except Exception as e:
+                return JsonResponse({"error": f"Failed to embed candidate memory: {e}"}, status=502)
             memories_db = MemoriesDBManager()
             neighbors = memories_db.search_similar_memories(candidate_embedding, top_k=5)
+            
+            print(neighbors)
 
             action, target_id = await decide_action(candidate_memory, neighbors)
 
@@ -317,8 +281,7 @@ async def process_memory(request):
 
             if action == "ADD":
                 item = {
-                    "id": user_id,
-                    "conversationId": conversation_id,
+                    "id": str(uuid.uuid4()),
                     "content": candidate_memory,
                     "embedding": candidate_embedding,
                     "created_at": datetime.utcnow().isoformat()
@@ -329,10 +292,6 @@ async def process_memory(request):
             elif action == "UPDATE" and target_id:
                 try:
                     doc = memories_db.get_item(target_id)
-                    print("\n>>> MEMORY TO BE Updated <<<")
-                    print(f"ID: {doc['id']}")
-                    print(f"Content: {doc['content']}")
-                    print(">>> =======================\n")
                     merged_prompt = (
                         f"Existing memory:\n{doc['content']}\n\n"
                         f"Candidate memory:\n{candidate_memory}\n\n"
@@ -352,25 +311,8 @@ async def process_memory(request):
 
             elif action == "DELETE" and target_id:
                 try:
-                    # Log before deleting
-                    doc_to_delete = memories_db.get_item(target_id)
-                    print("\n>>> MEMORY TO BE DELETED <<<")
-                    print(f"ID: {doc_to_delete['id']}")
-                    print(f"Content: {doc_to_delete['content']}")
-                    print(">>> =======================\n")
-
                     memories_db.delete_item(target_id)
-                    # Insert candidate memory after deletion
-                    new_doc = {
-                        "id": str(uuid.uuid4()),
-                        "userId": user_id,
-                        "conversationId": conversation_id,
-                        "content": candidate_memory,
-                        "embedding": candidate_embedding,
-                        "created_at": datetime.utcnow().isoformat()
-                    }
-                    memories_db.create_item(new_doc)
-                    result["status"] = f"Deleted {target_id} and replaced with candidate memory"
+                    result["status"] = f"Deleted memory {target_id}"
                 except Exception as e:
                     result["status"] = f"Failed to delete: {str(e)}"
 
