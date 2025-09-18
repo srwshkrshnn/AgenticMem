@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "AgenticMem",
   "description": "AgenticMem Chrome Extension (boilerplate).",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "action": {
     "default_title": "AgenticMem",
     "default_popup": "popup.html"
@@ -19,12 +19,22 @@
     {
       "matches": ["https://chat.openai.com/*", "https://chatgpt.com/*"],
       "js": ["src/chatgpt/content.js"]
+    },
+    {
+      "matches": [
+        "https://teams.microsoft.com/*",
+        "https://*.teams.microsoft.com/*"
+      ],
+      "js": ["src/teams/content.js"],
+      "run_at": "document_idle"
     }
   ],
   "host_permissions": [
     "https://api.mem0.ai/*",
     "https://chat.openai.com/*",
     "https://chatgpt.com/*",
+    "https://teams.microsoft.com/*",
+    "https://*.teams.microsoft.com/*",
     "http://localhost:8000/*"
   ]
 }
