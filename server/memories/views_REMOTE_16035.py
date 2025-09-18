@@ -10,67 +10,13 @@ from django.conf import settings
 import httpx
 import uuid
 
-# -----------------------------
-# Helper Functions
-# -----------------------------
-def filter_relevant_memories(query_text: str, memories: list):
-    """Use Azure OpenAI to keep only memories relevant to the query.
-
-    Args:
-        query_text: The user's search text.
-        memories: List of memory dicts each having at least 'id' and 'content'.
-
-    Returns:
-        Filtered list (subset) of the original memories. Returns an empty list
-        if the model deems none relevant, and returns the original list if any
-        unexpected error occurs during filtering.
-    """
-    if not memories:
-        return memories
-    try:
-        import json as _json
-        candidate_min = [
-            {"id": item.get("id"), "content": (item.get("content") or "")[:800]}
-            for item in memories
-        ]
-        relevance_prompt = (
-            "You are a relevance filter.\n" \
-            f"User query: {query_text}\n\n" \
-            "Candidate memories (JSON array):\n" \
-            f"{_json.dumps(candidate_min, ensure_ascii=False)}\n\n" \
-            "Return ONLY a JSON array (no prose) of the 'id' values of memories that might be helpful or relevant to address the user query (context expansion, answering, follow-up).\n" \
-            "If none are relevant return []. Do not include duplicates or any explanation."
-        )
-        llm_raw = azure_openai.generate_completion(relevance_prompt, max_tokens=200, temperature=0)
-        selected_ids = []
-        if llm_raw:
-            llm_text = llm_raw.strip()
-            if '[' in llm_text and ']' in llm_text:
-                start = llm_text.find('[')
-                end = llm_text.rfind(']') + 1
-                json_segment = llm_text[start:end]
-                try:
-                    parsed = _json.loads(json_segment)
-                    if isinstance(parsed, list):
-                        selected_ids = [str(x) for x in parsed]
-                except Exception:
-                    pass
-        if selected_ids:
-            return [m for m in memories if str(m.get('id')) in selected_ids]
-        else:
-            # Empty means model judged none helpful
-            return []
-    except Exception:
-        # Fail open: return original list if filtering fails unexpectedly
-        return memories
-
 @api_view(['POST'])
 def add_memory(request):
     try:
-        content = request.data.get('content')
-        if not content:
-            return JsonResponse({"error": "'content' is required"}, status=400)
-        memory = Memory(content=content)
+        memory = Memory(
+            title=request.data.get('title'),
+            content=request.data.get('content')
+        )
         memories_db = MemoriesDBManager()
         cosmos_item = memory.to_cosmos_item()
         created_item = memories_db.create_item(cosmos_item)
@@ -106,11 +52,12 @@ def retrieve_memories(request):
                 
         similar = memories_db.search_similar_memories(embedding, top_k=top_k)
         response = [
-            {**mem.to_cosmos_item(), 'similarity': score}
+            {
+                **mem.to_cosmos_item(),
+                'similarity': score
+            }
             for mem, score in similar
         ]
-        # Apply LLM-based relevance filtering (returns only useful memories or [] on low relevance)
-        response = filter_relevant_memories(query_text, response)
         return JsonResponse(response, safe=False)
     except Exception as e:
         return JsonResponse({"error": str(e)}, status=500)
@@ -120,27 +67,20 @@ def generate_conversation_id(user_id: str) -> str:
 
 async def get_embedding_async(text: str):
     """Generate embedding from Azure OpenAI."""
-    base = settings.AZURE_OPENAI_ENDPOINT.rstrip('/') if settings.AZURE_OPENAI_ENDPOINT else ''
-    url = f"{base}/openai/deployments/{settings.AZURE_OPENAI_EMBEDDING_DEPLOYMENT}/embeddings?api-version={settings.AZURE_OPENAI_VERSION}"
+    url = f"{settings.AZURE_OPENAI_ENDPOINT}/openai/deployments/{settings.AZURE_OPENAI_EMBEDDING_DEPLOYMENT}/embeddings?api-version=2023-05-15"
     headers = {"Content-Type": "application/json", "api-key": settings.AZURE_OPENAI_KEY}
     payload = {"input": text}
-    try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(url, headers=headers, json=payload)
-            resp.raise_for_status()
-            data = resp.json()
-            return data["data"][0]["embedding"]
-    except httpx.HTTPStatusError as he:
-        # Surface Azure specific error for easier debugging
-        raise RuntimeError(f"Embedding request failed {he.response.status_code}: {he.response.text}") from he
-    except Exception as e:
-        raise RuntimeError(f"Embedding request error: {e}") from e
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(url, headers=headers, json=payload)
+        resp.raise_for_status()
+        data = resp.json()
+        return data["data"][0]["embedding"]
 
 
 async def llm_generate_async(prompt: str, system: str = None, max_tokens: int = 256):
     """Call Azure OpenAI Chat (gpt-4o-mini)."""
-    base = settings.AZURE_OPENAI_ENDPOINT.rstrip('/') if settings.AZURE_OPENAI_ENDPOINT else ''
-    url = f"{base}/openai/deployments/{settings.AZURE_OPENAI_DEPLOYMENT}/chat/completions?api-version={settings.AZURE_OPENAI_VERSION}"
+    url = f"{settings.AZURE_OPENAI_ENDPOINT}/openai/deployments/{settings.AZURE_OPENAI_DEPLOYMENT}/chat/completions?api-version=2023-05-15"
     headers = {"Content-Type": "application/json", "api-key": settings.AZURE_OPENAI_KEY}
     messages = []
     if system:
@@ -148,16 +88,26 @@ async def llm_generate_async(prompt: str, system: str = None, max_tokens: int = 
     messages.append({"role": "user", "content": prompt})
 
     payload = {"messages": messages, "max_tokens": max_tokens}
-    try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(url, headers=headers, json=payload)
-            resp.raise_for_status()
-            data = resp.json()
-            return data["choices"][0]["message"]["content"].strip()
-    except httpx.HTTPStatusError as he:
-        raise RuntimeError(f"Chat request failed {he.response.status_code}: {he.response.text}") from he
-    except Exception as e:
-        raise RuntimeError(f"Chat request error: {e}") from e
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(url, headers=headers, json=payload)
+        resp.raise_for_status()
+        data = resp.json()
+        return data["choices"][0]["message"]["content"].strip()
+
+async def vector_search(embedding, top_k=5):
+    query = {
+        "vector": {
+            "path": "/embedding",
+            "topK": top_k,
+            "vector": embedding,
+            "includeSimilarityScore": True
+        }
+    }
+    def sync_query():
+        return list(memories_container.query_items(query=query, enable_cross_partition_query=True))
+    
+    results = await asyncio.to_thread(sync_query)
+    return results
 
 
 def clean_text(txt: str) -> str:
@@ -271,10 +221,7 @@ async def process_memory(request):
                 f"New message:\n{message}\n\n"
                 f"Update the summary:"
             )
-            try:
-                new_summary = await llm_generate_async(summary_prompt, system="You are a concise summarizer.")
-            except Exception as e:
-                return JsonResponse({"error": f"Failed to generate summary: {e}"}, status=502)
+            new_summary = await llm_generate_async(summary_prompt, system="You are a concise summarizer.")
 
             # Track last N messages
             existing_summary_doc = None
@@ -339,10 +286,7 @@ async def process_memory(request):
                         f"Merge them into one improved memory:"
                     )
                     merged_text = await llm_generate_async(merged_prompt, system="You merge memories into better ones.")
-                    try:
-                        new_emb = await get_embedding_async(merged_text)
-                    except Exception as e:
-                        return JsonResponse({"error": f"Failed to re-embed merged memory: {e}"}, status=502)
+                    new_emb = await get_embedding_async(merged_text)
                     doc["content"] = merged_text
                     doc["embedding"] = new_emb
                     memories_db.upsert_item(doc)

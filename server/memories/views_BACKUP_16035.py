@@ -305,9 +305,21 @@ async def process_memory(request):
                 f"Based on:\nSummary: {new_summary}\nNew message: {message}\n\n"
                 f"Write a short candidate memory:"
             )
+<<<<<<< HEAD
+            try:
+                candidate_memory = await llm_generate_async(memory_prompt, system="You are a memory creator.")
+            except Exception as e:
+                return JsonResponse({"error": f"Failed to generate candidate memory: {e}"}, status=502)
+
+            try:
+                candidate_embedding = await get_embedding_async(candidate_memory)
+            except Exception as e:
+                return JsonResponse({"error": f"Failed to embed candidate memory: {e}"}, status=502)
+=======
             candidate_memory = await llm_generate_async(memory_prompt, system="You are a memory creator.")
             candidate_embedding = await get_embedding_async(candidate_memory)
 
+>>>>>>> 32ea289 (fix summaries table)
             memories_db = MemoriesDBManager()
             neighbors = memories_db.search_similar_memories(candidate_embedding, top_k=5)
 
