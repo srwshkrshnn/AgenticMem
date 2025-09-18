@@ -20,6 +20,14 @@ function isRealTextarea(el) {
   return el && el.tagName === 'TEXTAREA';
 }
 
+function getEditableRoot() {
+  const ta = getTextarea();
+  if (ta) return ta;
+  // Fallback: look for a contentEditable region inside the composer wrapper
+  const ce = document.querySelector('[contenteditable="true"]');
+  return ce || ta;
+}
+
 function escapeHtml(str) {
   return (str || '')
     .replace(/&/g, '&amp;')
@@ -175,14 +183,14 @@ try {
           const content = (mem.content || '').replace(/\s+/g, ' ').trim();
           return `- (${idx + 1}) ${content}`.trim();
         });
-        const formatted = formattedLines.join('\n');
+  const formatted = formattedLines.join('\n');
         // We will prepend exactly two blank lines before the header (handled below), so no leading newlines here
         const prefix = '[Retrieved Context Memories]\n' +
             'Use these ONLY as silent background context. Do NOT echo, summarize, or refer to them explicitly unless the user directly asks.\n' +
             'In your response, focus solely on the user\'s current request. If none are relevant, ignore them.\n\n';
         const suffix = '\n[End Context Memories]\n';
         // Append to existing draft (marker removed per latest requirement)
-        const currentVal = textarea.value || textarea.textContent || '';
+  const currentVal = (isRealTextarea(textarea) ? textarea.value : textarea.textContent) || '';
         // Ensure exactly two blank lines before injected context in textarea scenario
         let baseVal = currentVal;
         if (!/\n\n$/.test(baseVal)) {
@@ -192,18 +200,33 @@ try {
         if (isRealTextarea(textarea)) {
           textarea.value = newVal;
         } else {
-          // For contentEditable, build HTML with <br>. Prepend two blank lines (two <br>). 
-          const htmlBlock = [
-            '', // first blank line
-            '', // second blank line
-            '[Retrieved Context Memories]',
-            'Use these ONLY as silent background context. Do NOT echo, summarize, or refer to them explicitly unless the user directly asks.',
-            "In your response, focus solely on the user's current request. If none are relevant, ignore them.",
-            '', // blank line before list
-            ...formattedLines,
-            '[End Context Memories]'
-          ].map(l => escapeHtml(l)).join('<br>');
-          textarea.innerHTML = escapeHtml(currentVal) + htmlBlock;
+          // For contentEditable: build paragraph-based HTML so each line shows and is preserved on send.
+          // We'll append structured <p> nodes instead of relying on raw newlines.
+          const existingHTML = textarea.innerHTML || '';
+          const para = (t) => `<p>${escapeHtml(t)}</p>`;
+          const blank = '<p></p>';
+          const memoryParas = formattedLines.map(l => para(l));
+          const blockHTML = [
+            blank, blank, // ensure two blank lines before context
+            para('[Retrieved Context Memories]'),
+            para('Use these ONLY as silent background context. Do NOT echo, summarize, or refer to them explicitly unless the user directly asks.'),
+            para("In your response, focus solely on the user's current request. If none are relevant, ignore them."),
+            blank,
+            ...memoryParas,
+            para('[End Context Memories]')
+          ].join('');
+          textarea.innerHTML = existingHTML + blockHTML;
+          // Set caret at end
+          try {
+            const sel = window.getSelection();
+            if (sel) {
+              const range = document.createRange();
+              range.selectNodeContents(textarea);
+              range.collapse(false);
+              sel.removeAllRanges();
+              sel.addRange(range);
+            }
+          } catch(_) {}
         }
         // Trigger input event so site frameworks react
         textarea.dispatchEvent(new Event('input', { bubbles: true }));
