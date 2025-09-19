@@ -10,86 +10,18 @@ from django.conf import settings
 import httpx
 import uuid
 
-# Added import for Graphiti integration
-from .graphiti_client import get_graphiti  # lazy async initializer
-from graphiti_core.nodes import EpisodeType  # for source type
-
-# -----------------------------
-# Helper Functions
-# -----------------------------
-def filter_relevant_memories(query_text: str, memories: list):
-    """Use Azure OpenAI to keep only memories relevant to the query.
-
-    Args:
-        query_text: The user's search text.
-        memories: List of memory dicts each having at least 'id' and 'content'.
-
-    Returns:
-        Filtered list (subset) of the original memories. Returns an empty list
-        if the model deems none relevant, and returns the original list if any
-        unexpected error occurs during filtering.
-    """
-    if not memories:
-        print("[filter_relevant_memories] No memories supplied; returning empty list")
-        return memories
-    try:
-        import json as _json
-        print(f"[filter_relevant_memories] Filtering {len(memories)} memories for query: {query_text[:120]}")
-        candidate_min = [
-            {"id": item.get("id"), "content": (item.get("content") or "")[:800]}
-            for item in memories
-        ]
-        relevance_prompt = (
-            "You are a relevance filter.\n" \
-            f"User query: {query_text}\n\n" \
-            "Candidate memories (JSON array):\n" \
-            f"{_json.dumps(candidate_min, ensure_ascii=False)}\n\n" \
-            "Return ONLY a JSON array (no prose) of the 'id' values of memories that might be helpful or relevant to address the user query (context expansion, answering, follow-up).\n" \
-            "If none are relevant return []. Do not include duplicates or any explanation."
-        )
-        llm_raw = azure_openai.generate_completion(relevance_prompt, max_tokens=200, temperature=0)
-        selected_ids = []
-        if llm_raw:
-            llm_text = llm_raw.strip()
-            if '[' in llm_text and ']' in llm_text:
-                start = llm_text.find('[')
-                end = llm_text.rfind(']') + 1
-                json_segment = llm_text[start:end]
-                try:
-                    parsed = _json.loads(json_segment)
-                    if isinstance(parsed, list):
-                        selected_ids = [str(x) for x in parsed]
-                except Exception:
-                    pass
-        if selected_ids:
-            filtered = [m for m in memories if str(m.get('id')) in selected_ids]
-            print(f"[filter_relevant_memories] Model selected {len(filtered)} / {len(memories)} memories")
-            return filtered
-        else:
-            # Empty means model judged none helpful
-            print("[filter_relevant_memories] Model returned empty selection []")
-            return []
-    except Exception:
-        # Fail open: return original list if filtering fails unexpectedly
-        print("[filter_relevant_memories] Exception during filtering; returning original list (fail-open)")
-        return memories
-
 @api_view(['POST'])
 def add_memory(request):
     try:
-        print("[add_memory] Incoming request")
-        content = request.data.get('content')
-        if not content:
-            print("[add_memory] Missing 'content' field")
-            return JsonResponse({"error": "'content' is required"}, status=400)
-        memory = Memory(content=content)
+        memory = Memory(
+            title=request.data.get('title'),
+            content=request.data.get('content')
+        )
         memories_db = MemoriesDBManager()
         cosmos_item = memory.to_cosmos_item()
         created_item = memories_db.create_item(cosmos_item)
-        print(f"[add_memory] Created memory id={created_item.get('id')}")
         return JsonResponse(created_item, status=201)
     except Exception as e:
-        print(f"[add_memory] Exception: {e}")
         return JsonResponse({"error": str(e)}, status=400)
 
 @api_view(['GET'])
@@ -105,11 +37,9 @@ def retrieve_memories(request):
         query_text = request.query_params.get('q')
         if not query_text:
             return JsonResponse({"error": "Missing required query parameter 'q'"}, status=400)
-        print(f"[retrieve_memories] Query param q='{query_text[:100]}'")
 
         embedding = azure_openai.generate_embeddings(query_text)
         if embedding is None:
-            print("[retrieve_memories] Failed to generate embedding")
             return JsonResponse({"error": "Failed to generate embedding"}, status=500)
 
         top_k_param = request.query_params.get('top_k')
@@ -121,17 +51,15 @@ def retrieve_memories(request):
                 return JsonResponse({"error": "Invalid 'top_k' parameter"}, status=400)
                 
         similar = memories_db.search_similar_memories(embedding, top_k=top_k)
-        print(f"[retrieve_memories] Retrieved {len(similar)} similar memories before LLM relevance filter")
         response = [
-            {**mem.to_cosmos_item(), 'similarity': score}
+            {
+                **mem.to_cosmos_item(),
+                'similarity': score
+            }
             for mem, score in similar
         ]
-        # Apply LLM-based relevance filtering (returns only useful memories or [] on low relevance)
-        response = filter_relevant_memories(query_text, response)
-        print(f"[retrieve_memories] Returning {len(response)} memories after relevance filter")
         return JsonResponse(response, safe=False)
     except Exception as e:
-        print(f"[retrieve_memories] Exception: {e}")
         return JsonResponse({"error": str(e)}, status=500)
 
 def generate_conversation_id(user_id: str) -> str:
@@ -139,31 +67,20 @@ def generate_conversation_id(user_id: str) -> str:
 
 async def get_embedding_async(text: str):
     """Generate embedding from Azure OpenAI."""
-    print(f"[get_embedding_async] Generating embedding len(text)={len(text)}")
-    base = settings.AZURE_OPENAI_ENDPOINT.rstrip('/') if settings.AZURE_OPENAI_ENDPOINT else ''
-    url = f"{base}/openai/deployments/{settings.AZURE_OPENAI_EMBEDDING_DEPLOYMENT}/embeddings?api-version={settings.AZURE_OPENAI_VERSION}"
+    url = f"{settings.AZURE_OPENAI_ENDPOINT}/openai/deployments/{settings.AZURE_OPENAI_EMBEDDING_DEPLOYMENT}/embeddings?api-version=2023-05-15"
     headers = {"Content-Type": "application/json", "api-key": settings.AZURE_OPENAI_KEY}
     payload = {"input": text}
-    try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(url, headers=headers, json=payload)
-            resp.raise_for_status()
-            data = resp.json()
-            return data["data"][0]["embedding"]
-    except httpx.HTTPStatusError as he:
-        # Surface Azure specific error for easier debugging
-        print(f"[get_embedding_async] HTTPStatusError: {he.response.status_code}")
-        raise RuntimeError(f"Embedding request failed {he.response.status_code}: {he.response.text}") from he
-    except Exception as e:
-        print(f"[get_embedding_async] Exception: {e}")
-        raise RuntimeError(f"Embedding request error: {e}") from e
+
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(url, headers=headers, json=payload)
+        resp.raise_for_status()
+        data = resp.json()
+        return data["data"][0]["embedding"]
 
 
 async def llm_generate_async(prompt: str, system: str = None, max_tokens: int = 256):
     """Call Azure OpenAI Chat (gpt-4o-mini)."""
-    print(f"[llm_generate_async] system='{(system or '')[:40]}' prompt_len={len(prompt)} max_tokens={max_tokens}")
-    base = settings.AZURE_OPENAI_ENDPOINT.rstrip('/') if settings.AZURE_OPENAI_ENDPOINT else ''
-    url = f"{base}/openai/deployments/{settings.AZURE_OPENAI_DEPLOYMENT}/chat/completions?api-version={settings.AZURE_OPENAI_VERSION}"
+    url = f"{settings.AZURE_OPENAI_ENDPOINT}/openai/deployments/{settings.AZURE_OPENAI_DEPLOYMENT}/chat/completions?api-version=2023-05-15"
     headers = {"Content-Type": "application/json", "api-key": settings.AZURE_OPENAI_KEY}
     messages = []
     if system:
@@ -171,18 +88,26 @@ async def llm_generate_async(prompt: str, system: str = None, max_tokens: int = 
     messages.append({"role": "user", "content": prompt})
 
     payload = {"messages": messages, "max_tokens": max_tokens}
-    try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(url, headers=headers, json=payload)
-            resp.raise_for_status()
-            data = resp.json()
-            return data["choices"][0]["message"]["content"].strip()
-    except httpx.HTTPStatusError as he:
-        print(f"[llm_generate_async] HTTPStatusError: {he.response.status_code}")
-        raise RuntimeError(f"Chat request failed {he.response.status_code}: {he.response.text}") from he
-    except Exception as e:
-        print(f"[llm_generate_async] Exception: {e}")
-        raise RuntimeError(f"Chat request error: {e}") from e
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(url, headers=headers, json=payload)
+        resp.raise_for_status()
+        data = resp.json()
+        return data["choices"][0]["message"]["content"].strip()
+
+async def vector_search(embedding, top_k=5):
+    query = {
+        "vector": {
+            "path": "/embedding",
+            "topK": top_k,
+            "vector": embedding,
+            "includeSimilarityScore": True
+        }
+    }
+    def sync_query():
+        return list(memories_container.query_items(query=query, enable_cross_partition_query=True))
+    
+    results = await asyncio.to_thread(sync_query)
+    return results
 
 
 def clean_text(txt: str) -> str:
@@ -271,12 +196,9 @@ async def process_memory(request):
             # ✅ Parse JSON payload
             body = request.body
             payload = json.loads(body.decode("utf-8"))
-            print(f"[process_memory] Received POST body size={len(body)}")
-            
 
             message = payload.get("message", "").strip()
             if not message:
-                print("[process_memory] Missing 'message' in payload")
                 return JsonResponse({"error": "Please provide 'message'"}, status=400)
 
             user_id = payload.get("userId")
@@ -299,20 +221,13 @@ async def process_memory(request):
                 f"New message:\n{message}\n\n"
                 f"Update the summary:"
             )
-            try:
-                new_summary = await llm_generate_async(summary_prompt, system="You are a concise summarizer.")
-                print("[process_memory] Generated new summary")
-            except Exception as e:
-                print(f"[process_memory] Summary generation failed: {e}")
-                return JsonResponse({"error": f"Failed to generate summary: {e}"}, status=502)
+            new_summary = await llm_generate_async(summary_prompt, system="You are a concise summarizer.")
 
             # Track last N messages
             existing_summary_doc = None
             try:
                 existing_summary_doc = summaries_db.get_item(conversation_id)
-                print(f"[process_memory] Found existing summary doc for conversation_id={conversation_id}")
             except Exception:
-                print(f"[process_memory] No existing summary doc for conversation_id={conversation_id}")
                 pass  
 
             last_n = 5
@@ -331,29 +246,17 @@ async def process_memory(request):
                 "updatedAt": datetime.utcnow().isoformat()
             }
             summaries_db.upsert_item(summary_item)
-            print(f"[process_memory] Upserted summary doc id={conversation_id}")
 
             # 2. Candidate memory generation
             memory_prompt = (
                 f"Based on:\nSummary: {new_summary}\nNew message: {message}\n\n"
                 f"Write a short candidate memory:"
             )
-            try:
-                candidate_memory = await llm_generate_async(memory_prompt, system="You are a memory creator.")
-                print("[process_memory] Generated candidate memory")
-            except Exception as e:
-                print(f"[process_memory] Candidate memory generation failed: {e}")
-                return JsonResponse({"error": f"Failed to generate candidate memory: {e}"}, status=502)
+            candidate_memory = await llm_generate_async(memory_prompt, system="You are a memory creator.")
+            candidate_embedding = await get_embedding_async(candidate_memory)
 
-            try:
-                candidate_embedding = await get_embedding_async(candidate_memory)
-                print("[process_memory] Generated embedding for candidate memory")
-            except Exception as e:
-                print(f"[process_memory] Embedding generation failed: {e}")
-                return JsonResponse({"error": f"Failed to embed candidate memory: {e}"}, status=502)
             memories_db = MemoriesDBManager()
             neighbors = memories_db.search_similar_memories(candidate_embedding, top_k=5)
-            print(f"[process_memory] Retrieved {len(neighbors)} neighbors for candidate memory")
 
             action, target_id = await decide_action(candidate_memory, neighbors)
 
@@ -369,7 +272,6 @@ async def process_memory(request):
                 }
                 memories_db.create_item(item)
                 result["status"] = "Added new memory"
-                print(f"[process_memory] Added new memory id={item['id']}")
 
             elif action == "UPDATE" and target_id:
                 try:
@@ -384,19 +286,13 @@ async def process_memory(request):
                         f"Merge them into one improved memory:"
                     )
                     merged_text = await llm_generate_async(merged_prompt, system="You merge memories into better ones.")
-                    try:
-                        new_emb = await get_embedding_async(merged_text)
-                    except Exception as e:
-                        print(f"[process_memory] Re-embedding merged memory failed: {e}")
-                        return JsonResponse({"error": f"Failed to re-embed merged memory: {e}"}, status=502)
+                    new_emb = await get_embedding_async(merged_text)
                     doc["content"] = merged_text
                     doc["embedding"] = new_emb
                     memories_db.upsert_item(doc)
                     result["status"] = f"Updated memory {target_id}"
-                    print(f"[process_memory] Updated memory id={target_id}")
                 except Exception as e:
                     result["status"] = f"Failed to update: {str(e)}"
-                    print(f"[process_memory] Update failed for id={target_id}: {e}")
 
             elif action == "DELETE" and target_id:
                 try:
@@ -421,38 +317,14 @@ async def process_memory(request):
                     result["status"] = f"Deleted {target_id} and replaced with candidate memory"
                 except Exception as e:
                     result["status"] = f"Failed to delete: {str(e)}"
-                    print(f"[process_memory] Delete failed for id={target_id}: {e}")
 
             else:
                 result["status"] = "No operation performed"
 
             result["new_summary"] = new_summary
-
-            # -----------------------------
-            # Graphiti Ingestion (best-effort)
-            # -----------------------------
-            # We map the candidate/merged memory (or new summary) into a Graphiti episode
-            try:
-                graphiti = await get_graphiti()
-                episode_body = candidate_memory
-                await graphiti.add_episode(
-                    name=f"memory-{datetime.utcnow().isoformat()}",
-                    episode_body=episode_body,
-                    source=EpisodeType.text,
-                    source_description="processed_memory",
-                    reference_time=datetime.utcnow(),
-                )
-                result["graphiti"] = {"ingested": True}
-                print("[process_memory] Graphiti ingestion succeeded")
-            except Exception as ge:
-                # Swallow errors so primary flow isn't disrupted
-                result["graphiti"] = {"ingested": False, "error": str(ge)}
-                print(f"[process_memory] Graphiti ingestion failed: {ge}")
-
             return JsonResponse(result, safe=False)
 
         except Exception as e:
-            print(f"[process_memory] Unhandled exception: {e}")
             return JsonResponse({"error": str(e)}, status=500)
 
     return JsonResponse({"error": "Method not allowed"}, status=405)

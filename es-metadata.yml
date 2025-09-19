@@ -1,8 +1,0 @@
-schemaVersion: 0.0.1
-isProduction: false
-accountableOwners:
-  service: 724c33bf-1ab8-4691-adb1-0e61932919c2
-routing:
-  defaultAreaPath:
-    org: msdata
-    path: CosmosDB

@@ -1,5 +1,13 @@
 console.log('[AgenticMem] Content script loaded', new Date().toISOString());
 
+// Handle PING messages to verify content script is loaded
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.type === 'PING') {
+    sendResponse({ ok: true, timestamp: Date.now() });
+    return true;
+  }
+});
+
 // --- Selector configuration (kept as constants so adapters for other sites can override later) ---
 const TEXTAREA_SELECTOR = '#prompt-textarea';
 // Container that holds all messages in the ChatGPT conversation (updated CSS trail may change over time)
