@@ -31,6 +31,20 @@ DEBUG = int(os.getenv('DEBUG', '0')) == 1
 
 ALLOWED_HOSTS = ['*']  # Configure this properly in production
 
+# Azure Entra ID Configuration
+AZURE_AD_TENANT_ID = os.getenv('AZURE_AD_TENANT_ID', '')  # Your tenant ID
+AZURE_AD_CLIENT_ID = os.getenv('AZURE_AD_CLIENT_ID', '04437958-7157-44e1-9c0f-d8a56f6a3b1d')  # Your client ID
+
+# REST Framework settings
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'authentication.authentication.AzureADAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+}
 
 # Application definition
 
@@ -44,7 +58,22 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
     'memories',
+    'authentication',
 ]
+
+# Azure AD Settings
+AZURE_AD_CLIENT_ID = '04437958-7157-44e1-9c0f-d8a56f6a3b1d'
+
+# REST Framework settings
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'authentication.auth.AzureADAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ]
+}
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -123,12 +152,13 @@ AZURE_OPENAI_VERSION = os.getenv('AZURE_OPENAI_VERSION', '2023-05-15')
 AZURE_OPENAI_DEPLOYMENT = os.getenv('AZURE_OPENAI_DEPLOYMENT')
 AZURE_OPENAI_EMBEDDING_DEPLOYMENT = os.getenv('AZURE_OPENAI_EMBEDDING_DEPLOYMENT')
 
-
-# Minimal database config for Django admin and auth
-# This is required for Django to work, but won't be used for our Memory model
+# Database configuration
+# SQLite for authentication and Django admin
+# Cosmos DB for memories (handled separately in memories app)
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.dummy',
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
 

@@ -13,18 +13,32 @@
   },
   "permissions": [
     "storage",
-    "tabs"
+    "tabs",
+    "identity",
+    "scripting"
   ],
   "content_scripts": [
     {
       "matches": ["https://chat.openai.com/*", "https://chatgpt.com/*"],
-      "js": ["src/chatgpt/content.js"]
+      "js": ["src/chatgpt/content.js"],
+      "run_at": "document_idle"
     }
   ],
   "host_permissions": [
     "https://api.mem0.ai/*",
     "https://chat.openai.com/*",
     "https://chatgpt.com/*",
-    "http://localhost:8000/*"
-  ]
+    "http://localhost:8000/*",
+    "https://login.microsoftonline.com/*",
+    "https://graph.microsoft.com/*"
+  ],
+  "oauth2": {
+    "client_id": "04437958-7157-44e1-9c0f-d8a56f6a3b1d",
+    "scopes": [
+      "openid",
+      "profile",
+      "email",
+      "https://graph.microsoft.com/User.Read"
+    ]
+  }
 }
