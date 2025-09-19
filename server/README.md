@@ -162,6 +162,28 @@ memories_service/
    - Check deployment names
    - Monitor rate limits
 
+## Graphiti Integration
+
+This service now ingests processed conversational memories into a Graphiti temporal knowledge graph (Neo4j backend).
+
+Environment variables required for Graphiti:
+
+```
+OPENAI_API_KEY=your_openai_key
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=your_password
+# Optional
+MODEL_NAME=gpt-4o-mini
+SMALL_MODEL_NAME=gpt-4o-mini
+GRAPHITI_TELEMETRY_ENABLED=false  # disable anonymous telemetry if desired
+SEMAPHORE_LIMIT=10                # increase cautiously for faster ingestion
+```
+
+Ingestion occurs in `memories/views.py` inside `process_memory` after memory decision logic. Failures to ingest are non-fatal and returned under the `graphiti` key of the JSON response.
+
+See `memories/graphiti_client.py` for lazy initialization logic.
+
 ## Contributing
 1. Fork the repository
 2. Create a feature branch
