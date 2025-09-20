@@ -1,18 +1,20 @@
 from django.http import JsonResponse
 from rest_framework.decorators import api_view
 from .models import Memory
-from .cosmos_db import MemoriesDBManager,SummariesDBManager
+from .cosmos_db import MemoriesDBManager, SummariesDBManager
 from .azure_openai import azure_openai
-from datetime import datetime
+from datetime import datetime, timezone
 from django.views.decorators.csrf import csrf_exempt
 import json
 from django.conf import settings
 import httpx
 import uuid
+import re  # Needed for clean_text()
 
 # Added import for Graphiti integration
 from .graphiti_client import get_graphiti  # lazy async initializer
 from graphiti_core.nodes import EpisodeType  # for source type
+import hashlib  # for stable episode name hash suffix
 
 # -----------------------------
 # Helper Functions
@@ -264,195 +266,261 @@ Decide ONE action:
     return decision, ref_id
 
 
+# -----------------------------
+# Graphiti Episode Ingestion Helpers (parity with scripts/insert_episode.py)
+# -----------------------------
+def iso_now() -> str:
+    """Timezone-aware UTC ISO string (matches script style)."""
+    return datetime.now(timezone.utc).isoformat()
+
+
+async def ingest_graphiti_episode(body: str, source_desc: str = "processed_memory", name: str | None = None):
+    """Ingest a single episode into Graphiti.
+
+    Mirrors the logic in scripts/insert_episode.py so test scripts & runtime are consistent.
+    Adds a short content hash to reduce accidental duplicate names when multiple episodes
+    are created within the same second (timestamp collisions).
+    """
+    graphiti = await get_graphiti()
+    # Short hash based on body (content changes -> different name); safe if body very short.
+    hash_part = hashlib.sha1(body.encode("utf-8")).hexdigest()[:8]
+    ep_name = name or f"memory-{iso_now()}-{hash_part}"
+    resp = await graphiti.add_episode(
+        name=ep_name,
+        episode_body=body,
+        source=EpisodeType.text,
+        source_description=source_desc,
+        reference_time=datetime.now(timezone.utc),  # explicit tz-aware
+    )
+    return ep_name, resp
+
+
 @csrf_exempt
 async def process_memory(request):
-    if request.method == "POST":
+    """Process an incoming chat message into the memory system.
+
+    Expected JSON body (all required):
+      {
+        "message": "<user utterance>",
+        "userId": "<stable user id>",
+        "conversationId": "<stable conversation id>"
+      }
+    """
+    if request.method != "POST":
+        return JsonResponse({"error": "Method not allowed"}, status=405)
+
+    try:
+        body = request.body or b""
+        body_len = len(body)
+        print(f"[process_memory] Received POST body size={body_len}")
+        # Defensive: log truncated body for debugging
         try:
-            # ✅ Parse JSON payload
-            body = request.body
+            raw_preview = body.decode("utf-8")[:500]
+            print(f"[process_memory] Body preview: {raw_preview}")
+        except Exception:
+            print("[process_memory] Body could not be decoded as UTF-8")
+
+        if body_len == 0:
+            return JsonResponse({"error": "Empty request body"}, status=400)
+
+        # Parse JSON
+        try:
             payload = json.loads(body.decode("utf-8"))
-            print(f"[process_memory] Received POST body size={len(body)}")
-            
+        except json.JSONDecodeError as je:
+            print(f"[process_memory] JSON decode error: {je}")
+            return JsonResponse({"error": "Invalid JSON"}, status=400)
 
-            message = payload.get("message", "").strip()
-            if not message:
-                print("[process_memory] Missing 'message' in payload")
-                return JsonResponse({"error": "Please provide 'message'"}, status=400)
+        # Flexible key handling (allow camelCase / snake_case / legacy)
+        def pick(d, *names):
+            for n in names:
+                if n in d:
+                    return d[n]
+            return None
 
-            user_id = payload.get("userId")
-            conversation_id = payload.get("conversationId")
-            if not user_id or not conversation_id:
-                return JsonResponse({"error": "Please provide both 'userId' and 'conversationId'"}, status=400)
+        message = (pick(payload, "message", "text", "content") or "").strip()
+        user_id = pick(payload, "userId", "user_id", "userid", "user")
+        conversation_id = pick(payload, "conversationId", "conversation_id", "conversation", "convId")
 
-            summaries_db = SummariesDBManager()  
-            previous_summary = ""
-            try:
-                existing_summary_doc = summaries_db.get_item(conversation_id)
-                if existing_summary_doc:
-                    previous_summary = existing_summary_doc.get("summary", "")
-            except Exception:
-                pass  
+        missing = []
+        if not message:
+            missing.append("message")
+        if not user_id:
+            missing.append("userId")
+        if not conversation_id:
+            missing.append("conversationId")
+        if missing:
+            print(f"[process_memory] Validation failed missing={missing} keys_present={list(payload.keys())}")
+            return JsonResponse({
+                "error": "Missing required field(s)",
+                "missing": missing,
+                "receivedKeys": list(payload.keys())
+            }, status=400)
 
-            # 1. Generate new summary
-            summary_prompt = (
-                f"Previous summary:\n{previous_summary}\n\n"
-                f"New message:\n{message}\n\n"
-                f"Update the summary:"
-            )
-            try:
-                new_summary = await llm_generate_async(summary_prompt, system="You are a concise summarizer.")
-                print("[process_memory] Generated new summary")
-            except Exception as e:
-                print(f"[process_memory] Summary generation failed: {e}")
-                return JsonResponse({"error": f"Failed to generate summary: {e}"}, status=502)
+        summaries_db = SummariesDBManager()
 
-            # Track last N messages
-            existing_summary_doc = None
-            try:
-                existing_summary_doc = summaries_db.get_item(conversation_id)
-                print(f"[process_memory] Found existing summary doc for conversation_id={conversation_id}")
-            except Exception:
-                print(f"[process_memory] No existing summary doc for conversation_id={conversation_id}")
-                pass  
-
-            last_n = 5
+        # Fetch previous summary (id should match conversation_id for consistency)
+        previous_summary = ""
+        try:
+            existing_summary_doc = summaries_db.get_item(conversation_id)
             if existing_summary_doc:
-                last_messages = existing_summary_doc.get("lastNMessages", [])
-                last_messages.append(message)
-                last_messages = last_messages[-last_n:]
-            else:
-                last_messages = [message]
+                previous_summary = existing_summary_doc.get("summary", "")
+                print(f"[process_memory] Loaded previous summary length={len(previous_summary)}")
+        except Exception as e:
+            print(f"[process_memory] No previous summary found (ok). Details: {e}")
 
-            summary_item = {        
-                "id": user_id,
-                "conversationId": conversation_id,
-                "summary": new_summary,
-                "lastNMessages": last_messages,
-                "updatedAt": datetime.utcnow().isoformat()
-            }
+        summary_prompt = (
+            f"Previous summary:\n{previous_summary}\n\n"
+            f"New message:\n{message}\n\n"
+            f"Update the summary:"
+        )
+        try:
+            new_summary = await llm_generate_async(summary_prompt, system="You are a concise summarizer.")
+            print("[process_memory] Generated new summary")
+        except Exception as e:
+            print(f"[process_memory] Summary generation failed: {e}")
+            return JsonResponse({"error": f"Failed to generate summary: {e}"}, status=502)
+
+        # Maintain rolling window of last N messages
+        last_n = 5
+        try:
+            existing_summary_doc = summaries_db.get_item(conversation_id)
+        except Exception:
+            existing_summary_doc = None
+
+        if existing_summary_doc:
+            last_messages = existing_summary_doc.get("lastNMessages", [])
+            last_messages.append(message)
+            last_messages = last_messages[-last_n:]
+        else:
+            last_messages = [message]
+
+        # IMPORTANT: use conversation_id as the partition/id for summary retrieval consistency
+        summary_item = {
+            "id": conversation_id,
+            "userId": user_id,
+            "conversationId": conversation_id,
+            "summary": new_summary,
+            "lastNMessages": last_messages,
+            "updatedAt": datetime.utcnow().isoformat()
+        }
+        try:
             summaries_db.upsert_item(summary_item)
             print(f"[process_memory] Upserted summary doc id={conversation_id}")
+        except Exception as e:
+            print(f"[process_memory] Failed to upsert summary: {e}")
 
-            # 2. Candidate memory generation
-            memory_prompt = (
-                f"Based on:\nSummary: {new_summary}\nNew message: {message}\n\n"
-                f"Write a short candidate memory:"
-            )
+        # Candidate memory generation
+        memory_prompt = (
+            f"Based on:\nSummary: {new_summary}\nNew message: {message}\n\n"
+            f"Write a short candidate memory:"
+        )
+        try:
+            candidate_memory = await llm_generate_async(memory_prompt, system="You are a memory creator.")
+            print("[process_memory] Generated candidate memory")
+        except Exception as e:
+            print(f"[process_memory] Candidate memory generation failed: {e}")
+            return JsonResponse({"error": f"Failed to generate candidate memory: {e}"}, status=502)
+
+        try:
+            candidate_embedding = await get_embedding_async(candidate_memory)
+            print("[process_memory] Generated embedding for candidate memory")
+        except Exception as e:
+            print(f"[process_memory] Embedding generation failed: {e}")
+            return JsonResponse({"error": f"Failed to embed candidate memory: {e}"}, status=502)
+
+        memories_db = MemoriesDBManager()
+        neighbors = memories_db.search_similar_memories(candidate_embedding, top_k=5)
+        print(f"[process_memory] Retrieved {len(neighbors)} neighbors for candidate memory")
+
+        action, target_id = await decide_action(candidate_memory, neighbors)
+        result = {"action": action, "candidate_memory": candidate_memory}
+
+        if action == "ADD":
+            item = {
+                "id": str(uuid.uuid4()),
+                "userId": user_id,
+                "conversationId": conversation_id,
+                "content": candidate_memory,
+                "embedding": candidate_embedding,
+                "created_at": datetime.utcnow().isoformat()
+            }
             try:
-                candidate_memory = await llm_generate_async(memory_prompt, system="You are a memory creator.")
-                print("[process_memory] Generated candidate memory")
+                memories_db.create_item(item)
+                result["status"] = "Added new memory"
+                print(f"[process_memory] Added new memory id={item['id']}")
             except Exception as e:
-                print(f"[process_memory] Candidate memory generation failed: {e}")
-                return JsonResponse({"error": f"Failed to generate candidate memory: {e}"}, status=502)
+                result["status"] = f"Failed to add memory: {e}"
+                print(f"[process_memory] Create memory failed: {e}")
 
+        elif action == "UPDATE" and target_id:
             try:
-                candidate_embedding = await get_embedding_async(candidate_memory)
-                print("[process_memory] Generated embedding for candidate memory")
+                doc = memories_db.get_item(target_id)
+                print("\n>>> MEMORY TO BE UPDATED <<<")
+                print(f"ID: {doc.get('id')}")
+                print(f"Content: {doc.get('content')}")
+                print(">>> =======================\n")
+                merged_prompt = (
+                    f"Existing memory:\n{doc['content']}\n\n"
+                    f"Candidate memory:\n{candidate_memory}\n\n"
+                    f"Merge them into one improved memory:"
+                )
+                merged_text = await llm_generate_async(merged_prompt, system="You merge memories into better ones.")
+                try:
+                    new_emb = await get_embedding_async(merged_text)
+                except Exception as e:
+                    print(f"[process_memory] Re-embedding merged memory failed: {e}")
+                    return JsonResponse({"error": f"Failed to re-embed merged memory: {e}"}, status=502)
+                doc["content"] = merged_text
+                doc["embedding"] = new_emb
+                memories_db.upsert_item(doc)
+                result["status"] = f"Updated memory {target_id}"
+                print(f"[process_memory] Updated memory id={target_id}")
             except Exception as e:
-                print(f"[process_memory] Embedding generation failed: {e}")
-                return JsonResponse({"error": f"Failed to embed candidate memory: {e}"}, status=502)
-            memories_db = MemoriesDBManager()
-            neighbors = memories_db.search_similar_memories(candidate_embedding, top_k=5)
-            print(f"[process_memory] Retrieved {len(neighbors)} neighbors for candidate memory")
+                result["status"] = f"Failed to update memory: {e}"
+                print(f"[process_memory] Update failed for id={target_id}: {e}")
 
-            action, target_id = await decide_action(candidate_memory, neighbors)
-
-            result = {"action": action, "candidate_memory": candidate_memory}
-
-            if action == "ADD":
-                item = {
-                    "id": user_id,
+        elif action == "DELETE" and target_id:
+            try:
+                doc_to_delete = memories_db.get_item(target_id)
+                print("\n>>> MEMORY TO BE DELETED <<<")
+                print(f"ID: {doc_to_delete.get('id')}")
+                print(f"Content: {doc_to_delete.get('content')}")
+                print(">>> =======================\n")
+                memories_db.delete_item(target_id)
+                replacement = {
+                    "id": str(uuid.uuid4()),
+                    "userId": user_id,
                     "conversationId": conversation_id,
                     "content": candidate_memory,
                     "embedding": candidate_embedding,
                     "created_at": datetime.utcnow().isoformat()
                 }
-                memories_db.create_item(item)
-                result["status"] = "Added new memory"
-                print(f"[process_memory] Added new memory id={item['id']}")
+                memories_db.create_item(replacement)
+                result["status"] = f"Deleted {target_id} and replaced with candidate memory"
+            except Exception as e:
+                result["status"] = f"Failed to delete memory: {e}"
+                print(f"[process_memory] Delete failed for id={target_id}: {e}")
+        else:
+            result["status"] = "No operation performed"
 
-            elif action == "UPDATE" and target_id:
-                try:
-                    doc = memories_db.get_item(target_id)
-                    print("\n>>> MEMORY TO BE Updated <<<")
-                    print(f"ID: {doc['id']}")
-                    print(f"Content: {doc['content']}")
-                    print(">>> =======================\n")
-                    merged_prompt = (
-                        f"Existing memory:\n{doc['content']}\n\n"
-                        f"Candidate memory:\n{candidate_memory}\n\n"
-                        f"Merge them into one improved memory:"
-                    )
-                    merged_text = await llm_generate_async(merged_prompt, system="You merge memories into better ones.")
-                    try:
-                        new_emb = await get_embedding_async(merged_text)
-                    except Exception as e:
-                        print(f"[process_memory] Re-embedding merged memory failed: {e}")
-                        return JsonResponse({"error": f"Failed to re-embed merged memory: {e}"}, status=502)
-                    doc["content"] = merged_text
-                    doc["embedding"] = new_emb
-                    memories_db.upsert_item(doc)
-                    result["status"] = f"Updated memory {target_id}"
-                    print(f"[process_memory] Updated memory id={target_id}")
-                except Exception as e:
-                    result["status"] = f"Failed to update: {str(e)}"
-                    print(f"[process_memory] Update failed for id={target_id}: {e}")
+        result["new_summary"] = new_summary
 
-            elif action == "DELETE" and target_id:
-                try:
-                    # Log before deleting
-                    doc_to_delete = memories_db.get_item(target_id)
-                    print("\n>>> MEMORY TO BE DELETED <<<")
-                    print(f"ID: {doc_to_delete['id']}")
-                    print(f"Content: {doc_to_delete['content']}")
-                    print(">>> =======================\n")
-
-                    memories_db.delete_item(target_id)
-                    # Insert candidate memory after deletion
-                    new_doc = {
-                        "id": str(uuid.uuid4()),
-                        "userId": user_id,
-                        "conversationId": conversation_id,
-                        "content": candidate_memory,
-                        "embedding": candidate_embedding,
-                        "created_at": datetime.utcnow().isoformat()
-                    }
-                    memories_db.create_item(new_doc)
-                    result["status"] = f"Deleted {target_id} and replaced with candidate memory"
-                except Exception as e:
-                    result["status"] = f"Failed to delete: {str(e)}"
-                    print(f"[process_memory] Delete failed for id={target_id}: {e}")
-
-            else:
-                result["status"] = "No operation performed"
-
-            result["new_summary"] = new_summary
-
-            # -----------------------------
-            # Graphiti Ingestion (best-effort)
-            # -----------------------------
-            # We map the candidate/merged memory (or new summary) into a Graphiti episode
+        # Optional Graphiti ingestion (toggle via settings.GRAPHITI_INGEST_ENABLED = False to disable)
+        graphiti_enabled = getattr(settings, "GRAPHITI_INGEST_ENABLED", True)
+        if graphiti_enabled:
             try:
-                graphiti = await get_graphiti()
-                episode_body = candidate_memory
-                await graphiti.add_episode(
-                    name=f"memory-{datetime.utcnow().isoformat()}",
-                    episode_body=episode_body,
-                    source=EpisodeType.text,
-                    source_description="processed_memory",
-                    reference_time=datetime.utcnow(),
-                )
-                result["graphiti"] = {"ingested": True}
-                print("[process_memory] Graphiti ingestion succeeded")
+                ep_name, _ = await ingest_graphiti_episode(candidate_memory, source_desc="processed_memory")
+                result["graphiti"] = {"ingested": True, "episode_name": ep_name}
+                print(f"[process_memory] Graphiti ingestion succeeded episode={ep_name}")
             except Exception as ge:
-                # Swallow errors so primary flow isn't disrupted
                 result["graphiti"] = {"ingested": False, "error": str(ge)}
                 print(f"[process_memory] Graphiti ingestion failed: {ge}")
+        else:
+            result["graphiti"] = {"ingested": False, "skipped": True, "reason": "disabled via settings"}
+            print("[process_memory] Graphiti ingestion skipped (disabled via settings)")
 
-            return JsonResponse(result, safe=False)
+        return JsonResponse(result, safe=False)
 
-        except Exception as e:
-            print(f"[process_memory] Unhandled exception: {e}")
-            return JsonResponse({"error": str(e)}, status=500)
-
-    return JsonResponse({"error": "Method not allowed"}, status=405)
+    except Exception as e:
+        print(f"[process_memory] Unhandled exception: {e}")
+        return JsonResponse({"error": str(e)}, status=500)

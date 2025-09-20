@@ -62,11 +62,11 @@ function captureStoredDraft() {
 }
 
 // Consolidated handler for when the user sends a message (Enter or send button)
-function triggerProcessMemory() {
+async function triggerProcessMemory() {
   updateDraft();
   const draft = captureStoredDraft();
   const lastAssistant = getLastAssistantMessage();
-  sendProcessMemory(draft, lastAssistant);
+  await sendProcessMemory(draft, lastAssistant);
 }
 
 function bindTextarea(el) {
@@ -114,33 +114,71 @@ function getLastAssistantMessage() {
 // Previous constant caused 404 (POST /memories/process-memory/ 404). Adjusted to correct path.
 const PROCESS_MEMORY_ENDPOINT = 'http://localhost:8000/api/memories/process-memory/'; // Adjust if backend served elsewhere
 
-function sendProcessMemory(draft, lastAssistant) {
-  try {
-    // Build a single message string combining last assistant + current user draft
-    const parts = [];
-    if (lastAssistant) parts.push(`Assistant: ${lastAssistant}`);
-    if (draft) parts.push(`User: ${draft}`);
-    const message = parts.join('\n');
-    if (!message) return; // nothing to send
+// -----------------------------
+// ID Helpers (user + conversation)
+// -----------------------------
+async function fetchUserIdStrict() {
+  return new Promise((resolve, reject) => {
+    try {
+      chrome.runtime.sendMessage({ type: 'GET_USER_ID' }, resp => {
+        if (chrome.runtime.lastError) {
+          return reject(new Error(chrome.runtime.lastError.message));
+        }
+        if (!resp?.ok) {
+          return reject(new Error(resp?.error || 'User not authenticated'));
+        }
+        resolve(resp.userId);
+      });
+    } catch (e) { reject(e); }
+  });
+}
 
+function extractConversationIdFromUrl() {
+  try {
+    const path = location.pathname.split('/').filter(Boolean);
+    const cIndex = path.indexOf('c');
+    if (cIndex !== -1 && path[cIndex + 1]) return path[cIndex + 1];
+    if (path.length === 1 && path[0].length > 10) return path[0];
+    return null;
+  } catch (_) { return null; }
+}
+
+function getConversationId() {
+  const raw = extractConversationIdFromUrl();
+  if (!raw) throw new Error('Conversation ID unavailable');
+  return raw;
+}
+
+async function sendProcessMemory(draft, lastAssistant) {
+  // Build a single message string combining last assistant + current user draft
+  const parts = [];
+  if (lastAssistant) parts.push(`Assistant: ${lastAssistant}`);
+  if (draft) parts.push(`User: ${draft}`);
+  const message = parts.join('\n');
+  if (!message) return; // nothing to send
+
+  try {
+    const userId = await fetchUserIdStrict();
+    const conversationId = getConversationId();
+    const payload = { message, userId, conversationId };
+    console.log('[AgenticMem] Sending process-memory payload', payload);
     fetch(PROCESS_MEMORY_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message // per requirement: do NOT send previous_summary for now
-        // previous_summary intentionally omitted
-      })
+      body: JSON.stringify(payload)
     })
       .then(r => r.json().catch(() => ({})))
-      .then(data => {
-        console.log('[AgenticMem] process-memory result', data);
-      })
-      .catch(err => {
-        console.warn('[AgenticMem] process-memory request failed', err);
-      });
+      .then(data => { console.log('[AgenticMem] process-memory result', data); })
+      .catch(err => { console.warn('[AgenticMem] process-memory request failed', err); });
   } catch (e) {
-    console.warn('[AgenticMem] Failed to invoke process-memory', e);
+    console.warn('[AgenticMem] Aborting sendProcessMemory:', e.message);
   }
+}
+
+// Rebind handlers referencing triggerProcessMemory (ensure async invocation)
+function bindAll() {
+  bindTextarea(getTextarea());
+  bindSendButton(document.querySelector('#composer-submit-button'));
 }
 
 if (document.readyState === 'loading') {

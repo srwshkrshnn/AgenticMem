@@ -13,6 +13,8 @@ class AuthService {
         this.user = null;
         this.expiresAt = null;
         this._initialized = false;
+        this.claims = null;
+        this.primaryUserId = null; // derived from sub (preferred) or oid only after successful login
     }
 
     _generateNonce() {
@@ -21,31 +23,42 @@ class AuthService {
         return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
     }
 
+    _decodeJwt(token) {
+        if (!token) return null;
+        const parts = token.split('.');
+        if (parts.length !== 3) return null;
+        try {
+            const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+            return payload;
+        } catch (e) {
+            console.warn('[AgenticMem][auth] Failed to decode id_token', e);
+            return null;
+        }
+    }
+
     async init() {
         if (this._initialized) {
             return;
         }
 
-        // Try to get auth data from storage
-        const auth = await chrome.storage.local.get(['accessToken', 'idToken', 'user', 'expiresAt']);
-        
-        if (auth.accessToken && auth.idToken && auth.user && auth.expiresAt) {
-            // Check if token is expired
+            const auth = await chrome.storage.local.get(['accessToken', 'idToken', 'user', 'expiresAt', 'claims', 'primaryUserId']);
+            if (auth.accessToken && auth.idToken && auth.user && auth.expiresAt && auth.primaryUserId) {
             if (Date.now() >= auth.expiresAt) {
                 console.log('[AgenticMem][auth] Token expired, clearing auth data');
                 await this.logout();
                 return;
             }
-
             this.accessToken = auth.accessToken;
             this.idToken = auth.idToken;
-            this.token = auth.idToken;  // For compatibility
+            this.token = auth.idToken;
             this.user = auth.user;
             this.expiresAt = auth.expiresAt;
-            
+            this.claims = auth.claims || null;
+            this.primaryUserId = auth.primaryUserId;
             console.log('[AgenticMem][auth] Restored auth state:', {
                 accessToken: this.accessToken.substring(0, 10) + '...',
                 idToken: this.idToken.substring(0, 10) + '...',
+                userId: this.primaryUserId,
                 expiresAt: new Date(this.expiresAt).toISOString()
             });
         }
@@ -55,14 +68,10 @@ class AuthService {
 
     async login() {
         try {
-            // Get the redirect URL from Chrome
             const redirectUri = chrome.identity.getRedirectURL();
             console.log('[AgenticMem][auth] Redirect URI:', redirectUri);
-
-            // Generate state parameter for security
             const state = this._generateNonce();
-            
-            // Build the Microsoft login URL
+
             const authParams = new URLSearchParams({
                 client_id: AUTH_CONFIG.clientId,
                 response_type: AUTH_CONFIG.responseType,
@@ -76,65 +85,67 @@ class AuthService {
             const authUrl = `${AUTH_CONFIG.authority}/authorize?${authParams.toString()}`;
             console.log('[AgenticMem][auth] Auth URL:', authUrl);
 
-            // Launch the web auth flow
             const responseUrl = await chrome.identity.launchWebAuthFlow({
                 url: authUrl,
                 interactive: true
             });
+            if (!responseUrl) throw new Error('No response from auth flow');
 
-            if (!responseUrl) {
-                throw new Error('No response from auth flow');
+            console.log('[AgenticMem][auth] Response URL:', responseUrl.substring(0, 100) + '...');
+            const fragment = new URL(responseUrl).hash.substring(1);
+            const hashParams = new URLSearchParams(fragment);
+
+            // Early error detection from AAD
+            const err = hashParams.get('error');
+            if (err) {
+                const errDesc = decodeURIComponent(hashParams.get('error_description') || '').replace(/\+/g,' ');
+                // Common mapping
+                let friendly = errDesc || err;
+                if (err === 'access_denied') {
+                    friendly = 'Access was denied (user closed dialog or declined permissions).';
+                } else if (/AADSTS65001/.test(errDesc)) {
+                    friendly = 'The application needs admin consent for the requested permissions.';
+                } else if (/AADSTS900144/.test(errDesc)) {
+                    friendly = 'Invalid or mismatched redirect URI. Confirm it matches Azure AD app registration.';
+                } else if (/AADSTS500113/.test(errDesc)) {
+                    friendly = 'The reply URL/redirect URI is not registered for the application.';
+                }
+                throw new Error(`Azure AD error (${err}): ${friendly}`);
             }
 
-            // Parse the response URL
-            console.log('[AgenticMem][auth] Response URL:', responseUrl.substring(0, 100) + '...');
-            
-            const hashParams = new URLSearchParams(new URL(responseUrl).hash.substring(1));
             const accessToken = hashParams.get('access_token');
             const idToken = hashParams.get('id_token');
             const returnedState = hashParams.get('state');
             const expiresIn = hashParams.get('expires_in');
 
-            // Validate state parameter
-            if (returnedState !== state) {
-                throw new Error('State mismatch - possible security issue');
-            }
+            if (returnedState !== state) throw new Error('State mismatch - possible security issue');
+            if (!accessToken || !idToken) throw new Error('Missing required tokens');
 
-            if (!accessToken || !idToken) {
-                console.error('[AgenticMem][auth] Tokens received:', {
-                    hasAccessToken: !!accessToken,
-                    hasIdToken: !!idToken
-                });
-                throw new Error('Missing required tokens');
-            }
-
-            console.log('[AgenticMem][auth] Got tokens:', {
-                accessToken: accessToken.substring(0, 10) + '...',
-                idToken: idToken.substring(0, 10) + '...'
-            });
-
-            // Calculate token expiration time
             const expiresAt = Date.now() + (parseInt(expiresIn, 10) * 1000);
-
-            // Get user info using the access token
             const userInfo = await this.getUserInfo(accessToken);
-            
-            // Store authentication data
-            this.accessToken = accessToken;  // For Microsoft Graph API
-            this.idToken = idToken;         // For our backend API
-            this.token = idToken;           // For compatibility with existing code
+            const claims = this._decodeJwt(idToken) || {};
+            const sub = claims.sub;
+            const oid = claims.oid;
+            if (!sub && !oid) throw new Error('ID token missing both sub and oid claims; cannot establish user identity');
+            this.primaryUserId = sub || oid;
+
+            this.accessToken = accessToken;
+            this.idToken = idToken;
+            this.token = idToken;
             this.user = userInfo;
             this.expiresAt = expiresAt;
+            this.claims = claims;
 
-            // Save to chrome storage
             await chrome.storage.local.set({
                 accessToken: this.accessToken,
                 idToken: this.idToken,
-                token: this.idToken,  // For compatibility
+                token: this.idToken,
                 user: this.user,
-                expiresAt: this.expiresAt
+                expiresAt: this.expiresAt,
+                claims: this.claims,
+                primaryUserId: this.primaryUserId
             });
-
+            console.log('[AgenticMem][auth] Login success userId=', this.primaryUserId);
             return true;
         } catch (error) {
             console.error('Login error:', error);
@@ -144,29 +155,21 @@ class AuthService {
 
     async getUserInfo(accessToken) {
         const response = await fetch('https://graph.microsoft.com/v1.0/me', {
-            headers: {
-                'Authorization': `Bearer ${accessToken}`
-            }
+            headers: { 'Authorization': `Bearer ${accessToken}` }
         });
-
-        if (!response.ok) {
-            throw new Error('Failed to get user info');
-        }
-
+        if (!response.ok) throw new Error('Failed to get user info');
         return response.json();
     }
 
     async logout() {
         try {
-            // Clear storage
-            await chrome.storage.local.remove(['token', 'accessToken', 'user', 'expiresAt']);
-            
-            // Clear memory
+            await chrome.storage.local.remove(['token', 'accessToken', 'user', 'expiresAt', 'claims', 'primaryUserId']);
             this.token = null;
             this.accessToken = null;
             this.user = null;
             this.expiresAt = null;
-
+            this.claims = null;
+            this.primaryUserId = null;
             return true;
         } catch (error) {
             console.error('Logout error:', error);
@@ -175,38 +178,20 @@ class AuthService {
     }
 
     async makeAuthenticatedRequest(url, options = {}) {
-        if (!this.idToken) {
-            throw new Error('Not authenticated');
-        }
-
-        // Add authentication header with ID token for our backend
+        if (!this.idToken) throw new Error('Not authenticated');
         const headers = {
             ...options.headers,
             'Authorization': `Bearer ${this.idToken}`,
             'Content-Type': 'application/json'
         };
-
-        // Add base URL if the URL is relative
         const fullUrl = url.startsWith('http') ? url : `${AUTH_CONFIG.apiBaseUrl}${url}`;
-
         try {
-            const response = await fetch(fullUrl, {
-                ...options,
-                headers
-            });
-
-            // If unauthorized, try to refresh token
+            const response = await fetch(fullUrl, { ...options, headers });
             if (response.status === 401) {
-                await this.refreshToken();
-                
-                // Retry the request with new token
-                headers.Authorization = `Bearer ${this.token}`;
-                return fetch(fullUrl, {
-                    ...options,
-                    headers
-                });
+                // Token refresh not implemented; force logout to avoid silent fallback.
+                await this.logout();
+                throw new Error('Unauthorized (401) - user logged out');
             }
-
             return response;
         } catch (error) {
             console.error('API request error:', error);
@@ -215,12 +200,12 @@ class AuthService {
     }
 
     isAuthenticated() {
-        return !!(this.token && this.expiresAt && Date.now() < this.expiresAt);
+        return !!(this.token && this.expiresAt && Date.now() < this.expiresAt && this.primaryUserId);
     }
 
-    getUser() {
-        return this.user;
-    }
+    getUser() { return this.user; }
+    getUserId() { return this.primaryUserId; }
+    getClaims() { return this.claims; }
 }
 
 export const authService = new AuthService();
