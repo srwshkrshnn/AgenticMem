@@ -4,7 +4,6 @@ import { Link, useLocation } from "wouter"
 import {
   Sidebar,
   SidebarContent,
-  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -132,20 +131,6 @@ export function AppSidebar({ memoryCount = 0, activeIntegrations = 0 }: AppSideb
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-sidebar-border">
-        <div className="px-4 py-3">
-          <div className="text-xs text-muted-foreground space-y-1">
-            <div className="flex justify-between">
-              <span>Total Memories:</span>
-              <span className="font-medium" data-testid="text-memory-count">{memoryCount}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Active Integrations:</span>
-              <span className="font-medium" data-testid="text-integration-count">{activeIntegrations}</span>
-            </div>
-          </div>
-        </div>
-      </SidebarFooter>
     </Sidebar>
   )
 }
