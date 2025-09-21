@@ -17,9 +17,14 @@ export async function addMemory(content: string): Promise<Memory> {
 
 // Backend doesn't expose update/delete yet; placeholder for when endpoints added
 export async function updateMemory(id: string, content: string): Promise<void> {
-  console.warn('Update not implemented on backend yet', id, content);
+  await api.put(`/${id}/`, { content });
 }
 
 export async function deleteMemory(id: string): Promise<void> {
-  console.warn('Delete not implemented on backend yet', id);
+  await api.delete(`/${id}/`);
+}
+
+export async function listMemories(limit = 50): Promise<Memory[]> {
+  const resp = await api.get('/list/', { params: { limit } });
+  return resp.data as Memory[];
 }

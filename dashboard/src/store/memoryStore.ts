@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { Memory } from '../types';
-import { addMemory, searchMemories, updateMemory, deleteMemory } from '../api/client';
+import { addMemory, searchMemories, updateMemory, deleteMemory, listMemories } from '../api/client';
 
 interface MemoryState {
   memories: Memory[];
@@ -21,7 +21,13 @@ const useMemoryStore = create<MemoryState>((set, get) => ({
   fetchMemories: async (q: string) => {
     set({ loading: true });
     try {
-      const data = await searchMemories(q);
+      const trimmed = q.trim();
+      let data: Memory[];
+      if (!trimmed) {
+        data = await listMemories(50);
+      } else {
+        data = await searchMemories(trimmed);
+      }
       set({ memories: data });
     } finally {
       set({ loading: false });
@@ -31,14 +37,26 @@ const useMemoryStore = create<MemoryState>((set, get) => ({
     const mem = await addMemory(content);
     set({ memories: [mem, ...get().memories] });
   },
-  removeMemory: (id: string) => {
-    // optimistic removal (backend delete missing)
-    deleteMemory(id);
-    set({ memories: get().memories.filter(m => m.id !== id) });
+  removeMemory: async (id: string) => {
+    const prev = get().memories;
+    set({ memories: prev.filter(m => m.id !== id) });
+    try {
+      await deleteMemory(id);
+    } catch (e) {
+      console.error('Failed to delete memory, rolling back', e);
+      set({ memories: prev });
+    }
   },
-  updateMemoryContent: (id: string, content: string) => {
-    updateMemory(id, content);
-    set({ memories: get().memories.map(m => m.id === id ? { ...m, content } : m) });
+  updateMemoryContent: async (id: string, content: string) => {
+    const prev = get().memories;
+    const updated = prev.map(m => m.id === id ? { ...m, content } : m);
+    set({ memories: updated });
+    try {
+      await updateMemory(id, content);
+    } catch (e) {
+      console.error('Failed to update memory, rolling back', e);
+      set({ memories: prev });
+    }
   }
 }));
 

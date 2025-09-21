@@ -1,5 +1,6 @@
 from django.http import JsonResponse
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import AllowAny
 from .models import Memory
 from .cosmos_db import MemoriesDBManager, SummariesDBManager
 from .azure_openai import azure_openai
@@ -77,6 +78,7 @@ def filter_relevant_memories(query_text: str, memories: list):
         return memories
 
 @api_view(['POST'])
+@permission_classes([AllowAny])
 def add_memory(request):
     try:
         print("[add_memory] Incoming request")
@@ -95,6 +97,7 @@ def add_memory(request):
         return JsonResponse({"error": str(e)}, status=400)
 
 @api_view(['GET'])
+@permission_classes([AllowAny])
 def retrieve_memories(request):
     """Retrieve similar memories using vector search.
 
@@ -135,6 +138,87 @@ def retrieve_memories(request):
     except Exception as e:
         print(f"[retrieve_memories] Exception: {e}")
         return JsonResponse({"error": str(e)}, status=500)
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def list_memories(request):
+    """List recent memories without vector search.
+
+    Query params:
+        limit: optional max number (default 50, max 200)
+    """
+    try:
+        limit_param = request.query_params.get('limit') if hasattr(request, 'query_params') else request.GET.get('limit')
+        try:
+            limit = int(limit_param) if limit_param else 50
+        except ValueError:
+            return JsonResponse({"error": "Invalid 'limit' parameter"}, status=400)
+        limit = max(1, min(limit, 200))
+        db = MemoriesDBManager()
+        # Cosmos SQL query sorted by created_at descending (ISO timestamps)
+        query = f"""
+        SELECT c.id, c.content, c.created_at, c.updated_at
+        FROM c
+        ORDER BY c.created_at DESC
+        OFFSET 0 LIMIT {limit}
+        """
+        items = list(db.container.query_items(query=query, enable_cross_partition_query=True))
+        return JsonResponse(items, safe=False)
+    except Exception as e:
+        print(f"[list_memories] Exception: {e}")
+        return JsonResponse({"error": str(e)}, status=500)
+
+
+@api_view(["GET", "PUT", "PATCH", "DELETE"])
+@permission_classes([AllowAny])
+def memory_detail(request, memory_id: str):
+    """Retrieve, update, or delete a single memory by id.
+
+    Methods:
+        GET: return memory document
+        PUT/PATCH: update content (re-embed) with body {"content": "..."}
+        DELETE: remove memory
+    """
+    db = MemoriesDBManager()
+    if request.method == "GET":
+        try:
+            item = db.get_item(memory_id)
+            return JsonResponse(item, status=200)
+        except Exception as e:
+            return JsonResponse({"error": f"Memory not found: {e}"}, status=404)
+
+    if request.method in ("PUT", "PATCH"):
+        try:
+            data = request.data if hasattr(request, 'data') else json.loads(request.body or b"{}")
+            new_content = data.get("content")
+            if not new_content:
+                return JsonResponse({"error": "'content' is required"}, status=400)
+            try:
+                doc = db.get_item(memory_id)
+            except Exception as e:
+                return JsonResponse({"error": f"Memory not found: {e}"}, status=404)
+            # Recompute embedding if content changed
+            if doc.get("content") != new_content:
+                try:
+                    embedding = azure_openai.generate_embeddings(new_content)
+                except Exception as ee:
+                    return JsonResponse({"error": f"Failed to re-embed content: {ee}"}, status=502)
+                doc["embedding"] = embedding
+            doc["content"] = new_content
+            doc["updated_at"] = datetime.utcnow().isoformat()
+            db.upsert_item(doc)
+            return JsonResponse(doc, status=200)
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=400)
+
+    if request.method == "DELETE":
+        try:
+            db.delete_item(memory_id)
+            return JsonResponse({"status": "deleted", "id": memory_id})
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=400)
+
+    return JsonResponse({"error": "Method not allowed"}, status=405)
 
 def generate_conversation_id(user_id: str) -> str:
     return f"{user_id}-conv-{uuid.uuid4().hex[:8]}"
