@@ -16,6 +16,7 @@ import re  # Needed for clean_text()
 from .graphiti_client import get_graphiti  # lazy async initializer
 from graphiti_core.nodes import EpisodeType  # for source type
 import hashlib  # for stable episode name hash suffix
+import asyncio
 
 # -----------------------------
 # Helper Functions
@@ -86,8 +87,17 @@ def add_memory(request):
         if not content:
             print("[add_memory] Missing 'content' field")
             return JsonResponse({"error": "'content' is required"}, status=400)
-        memory = Memory(content=content)
+        provided_id = request.data.get('id') if hasattr(request, 'data') else None
         memories_db = MemoriesDBManager()
+        if provided_id:
+            # Attempt to fetch existing
+            try:
+                existing = memories_db.get_item(provided_id)
+                if existing and existing.get('content') == content:
+                    return JsonResponse(existing, status=200)
+            except Exception:
+                pass
+        memory = Memory(content=content, id=provided_id)
         cosmos_item = memory.to_cosmos_item()
         created_item = memories_db.create_item(cosmos_item)
         print(f"[add_memory] Created memory id={created_item.get('id')}")
@@ -95,6 +105,102 @@ def add_memory(request):
     except Exception as e:
         print(f"[add_memory] Exception: {e}")
         return JsonResponse({"error": str(e)}, status=400)
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def add_memory_with_graphiti(request):
+    """Create a memory (Cosmos) and ingest identical content as a Graphiti episode.
+
+    Request JSON body:
+      {
+        "content": "<text>",               # required
+        "id": "M-001" (optional)           # if provided & not existing will be used
+        "episode_name": "mem-M-001" (opt)  # optional explicit Graphiti episode name
+        "source_description": "manual_seed" (opt)
+      }
+
+    Response 201 JSON:
+      { memory: {..cosmos item..}, graphiti: {episode_name, ingested: bool, error?} }
+
+    Idempotency helpers:
+      - If id provided and already exists -> returns 200 existing + graphiti: {skipped: true}
+      - If content already present (exact match) -> skip creation & return existing flag.
+    """
+    try:
+        data = request.data if hasattr(request, 'data') else json.loads(request.body or b"{}")
+        content = (data.get('content') or '').strip()
+        if not content:
+            return JsonResponse({"error": "'content' is required"}, status=400)
+        provided_id = data.get('id')
+        episode_name = data.get('episode_name')
+        source_description = data.get('source_description') or 'manual_seed'
+
+        memories_db = MemoriesDBManager()
+
+        # Idempotency path 1: Provided id already exists
+        if provided_id:
+            try:
+                existing = memories_db.get_item(provided_id)
+                if existing and existing.get('content') == content:
+                    return JsonResponse({
+                        'memory': existing,
+                        'graphiti': {'ingested': False, 'skipped': True, 'reason': 'memory id already exists'},
+                        'idempotent': True
+                    }, status=200)
+            except Exception:
+                # Not found -> proceed to create
+                pass
+
+        # Idempotency path 2: scan for identical content (cheap bounded query)
+        # NOTE: For large datasets you would build a content hash index; here we just pull recent.
+        duplicate = None
+        try:
+            query = """
+            SELECT TOP 25 c.id, c.content, c.created_at, c.updated_at FROM c ORDER BY c.created_at DESC
+            """
+            recent = list(memories_db.container.query_items(query=query, enable_cross_partition_query=True))
+            for r in recent:
+                if r.get('content') == content:
+                    duplicate = r
+                    break
+        except Exception:
+            pass
+        if duplicate:
+            return JsonResponse({
+                'memory': duplicate,
+                'graphiti': {'ingested': False, 'skipped': True, 'reason': 'duplicate content'},
+                'idempotent': True
+            }, status=200)
+
+        # Create memory (embed via model)
+        memory = Memory(content=content, id=provided_id)
+        cosmos_item = memory.to_cosmos_item()
+        created_item = memories_db.create_item(cosmos_item)
+
+        # Graphiti ingestion (episode) reuses same content. Run async helper in blocking context.
+        graphiti_result = {'ingested': False}
+        try:
+            import asyncio as _asyncio
+            ep_name, _ = _asyncio.run(ingest_graphiti_episode(content, source_desc=source_description, name=episode_name))
+            graphiti_result = {'ingested': True, 'episode_name': ep_name}
+        except RuntimeError as rt_err:
+            # If already in an event loop (unlikely in default dev server), create nested loop workaround
+            try:
+                import asyncio as _asyncio
+                loop = _asyncio.new_event_loop()
+                try:
+                    ep_name, _ = loop.run_until_complete(ingest_graphiti_episode(content, source_desc=source_description, name=episode_name))
+                    graphiti_result = {'ingested': True, 'episode_name': ep_name}
+                finally:
+                    loop.close()
+            except Exception as ge2:
+                graphiti_result = {'ingested': False, 'error': f"{rt_err}; nested loop failed: {ge2}"}
+        except Exception as ge:
+            graphiti_result = {'ingested': False, 'error': str(ge)}
+
+        return JsonResponse({'memory': created_item, 'graphiti': graphiti_result}, status=201)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
 
 @api_view(['GET'])
 @permission_classes([AllowAny])

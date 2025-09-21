@@ -4,6 +4,7 @@ BaseOpenAIClient._create_structured_completion is invoked with reasoning & verbo
 keywords, but the Azure implementation shipped in graphiti_core lacks these parameters.
 Until upstream updates, this shim preserves compatibility.
 """
+import os
 from typing import Any
 from openai import AsyncAzureOpenAI
 from pydantic import BaseModel
@@ -25,13 +26,49 @@ class PatchedAzureOpenAILLMClient(AzureOpenAILLMClient):
         reasoning: str | None = None,  # accepted but unused (Azure beta parse currently ignores)
         verbosity: str | None = None,  # accepted but unused
     ):
-        resp = await self.client.beta.chat.completions.parse(
-            model=model,
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            response_format=response_model,  # type: ignore
-        )
+        """Invoke Azure structured completion with defensive token limiting & adaptive retry.
+
+        Problems observed during batch Graphiti ingestion:
+          * Azure responses hitting 'Output length exceeded max tokens 8192' causing hard failures.
+
+        Mitigations applied here:
+          1. Clamp requested max_tokens to GRAPHITI_LLM_MAX_TOKENS (default 4096) to avoid overly large generations.
+          2. On 'Output length exceeded max tokens' errors, retry once with a halved token budget (min 512).
+        """
+
+        # 1. Clamp via env var override
+        try:
+            cap = int(os.getenv("GRAPHITI_LLM_MAX_TOKENS", "4096"))
+            if cap > 0:
+                if max_tokens > cap:
+                    max_tokens = cap
+        except Exception:
+            # Ignore parsing errors; proceed with provided max_tokens
+            pass
+
+        async def _call(requested_tokens: int):
+            return await self.client.beta.chat.completions.parse(
+                model=model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=requested_tokens,
+                response_format=response_model,  # type: ignore
+            )
+
+        try:
+            resp = await _call(max_tokens)
+        except Exception as e:  # noqa: BLE001
+            msg = str(e)
+            if "Output length exceeded max tokens" in msg and max_tokens > 512:
+                # 2. Adaptive single retry with halved token budget (floor 512)
+                reduced = max(512, max_tokens // 2)
+                try:
+                    resp = await _call(reduced)
+                except Exception:
+                    raise
+            else:
+                raise
+
         # Adapt OpenAI parse response to what BaseOpenAIClient expects: object.output_text -> JSON string
         try:
             parsed = resp.choices[0].message.parsed  # pydantic model

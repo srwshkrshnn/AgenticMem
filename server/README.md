@@ -184,6 +184,64 @@ Ingestion occurs in `memories/views.py` inside `process_memory` after memory dec
 
 See `memories/graphiti_client.py` for lazy initialization logic.
 
+## Demo Memory Seeding
+
+To populate the system with a curated demo dataset (35 synthetic engineering/project memories) and corresponding Graphiti episodes:
+
+1. Ensure the server is running (and Graphiti/Neo4j reachable if enabled):
+    ```bash
+    python manage.py runserver 8000
+    ```
+2. Run the seeding script:
+    ```bash
+    python scripts/seed_demo_memories.py --host http://localhost:8000
+    ```
+    Optional flags:
+    - `--limit 10` seed only first 10
+    - `--dry-run` show what would be posted
+    - `--delay 0.2` add slight delay between posts
+
+### New Endpoint
+
+`POST /api/memories/add-with-graphiti/`
+
+Request JSON:
+```json
+{
+   "id": "M-001",            // optional stable id; if omitted generated
+   "content": "text...",      // required
+   "episode_name": "episode-m-001", // optional Graphiti episode name
+   "source_description": "seed_demo" // optional
+}
+```
+
+Idempotency behavior:
+* If provided `id` already exists with identical content -> returns 200 with `idempotent: true`.
+* If recent memory has same content -> duplicate skipped (200) to avoid spam.
+* Otherwise creates Cosmos item (embedding auto-generated) then ingests Graphiti episode.
+
+Response (201 Created):
+```json
+{
+   "memory": { "id": "M-001", "content": "...", ... },
+   "graphiti": { "ingested": true, "episode_name": "episode-m-001" }
+}
+```
+On skip (200):
+```json
+{
+   "memory": { ...existing... },
+   "graphiti": { "ingested": false, "skipped": true, "reason": "duplicate content" },
+   "idempotent": true
+}
+```
+
+### Verifying
+* List recent memories: `GET /api/memories/list/?limit=10`
+* Hybrid (future) or vector search: `GET /api/memories/retrieve/?q=partition+key`
+* Inspect Graphiti (via its UI / Cypher) for new Episodic nodes containing the seeded texts.
+
+
 ## Contributing
 1. Fork the repository
 2. Create a feature branch
