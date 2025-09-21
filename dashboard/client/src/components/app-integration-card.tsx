@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { format } from "date-fns"
 import { type AppIntegration } from "@shared/schema"
+import copilotLogo from '@/assets/copilot.svg'
 
 // App configuration with icons, colors, and (optionally) direct SVG URLs
 // iconUrl (when present) will be attempted first; AvatarFallback (emoji) serves as graceful fallback
@@ -23,14 +24,19 @@ const appConfigs: Record<string, { icon: string; color: string; displayName: str
   docs: { icon: "📄", color: "bg-blue-500", displayName: "Google Docs", category: "Google Workspace", iconUrl: "https://upload.wikimedia.org/wikipedia/commons/6/66/Google_Docs_2020_Logo.svg" },
   sheets: { icon: "📊", color: "bg-green-600", displayName: "Google Sheets", category: "Google Workspace", iconUrl: "https://upload.wikimedia.org/wikipedia/commons/a/ae/Google_Sheets_2020_Logo.svg" },
   gcalendar: { icon: "📅", color: "bg-red-400", displayName: "Google Calendar", category: "Google Workspace", iconUrl: "https://upload.wikimedia.org/wikipedia/commons/a/a5/Google_Calendar_icon_%282020%29.svg" },
-  
-  // Browser Extensions
-  chatgpt: { icon: "🤖", color: "bg-green-700", displayName: "ChatGPT", category: "AI Tools", iconUrl: "https://upload.wikimedia.org/wikipedia/commons/e/ef/ChatGPT-Logo.svg" },
-  claude: { icon: "🧠", color: "bg-orange-500", displayName: "Claude", category: "AI Tools", iconUrl: "https://upload.wikimedia.org/wikipedia/commons/b/b0/Claude_AI_symbol.svg" },
+
+  // Other API Apps (OAuth)
   notion: { icon: "📝", color: "bg-gray-800", displayName: "Notion", category: "Productivity", iconUrl: "https://upload.wikimedia.org/wikipedia/commons/e/e9/Notion-logo.svg" },
   github: { icon: "🐙", color: "bg-gray-900", displayName: "GitHub", category: "Development", iconUrl: "https://upload.wikimedia.org/wikipedia/commons/9/95/Font_Awesome_5_brands_github.svg" },
+  
+  // Browser / Extension Capture (no full user-history API)
+  chatgpt: { icon: "�", color: "bg-green-700", displayName: "ChatGPT", category: "AI Tools", iconUrl: "https://upload.wikimedia.org/wikipedia/commons/e/ef/ChatGPT-Logo.svg" },
+  claude: { icon: "🧠", color: "bg-orange-500", displayName: "Claude", category: "AI Tools", iconUrl: "https://upload.wikimedia.org/wikipedia/commons/b/b0/Claude_AI_symbol.svg" },
+  copilot: { icon: "🪄", color: "bg-blue-600", displayName: "Microsoft Copilot", category: "AI Tools", iconUrl: copilotLogo },
+  grok: { icon: "🌀", color: "bg-gray-700", displayName: "Grok", category: "AI Tools", iconUrl: "https://upload.wikimedia.org/wikipedia/commons/7/71/Logo_version_Grok_AI_%28xAI%29_2025.png" },
   twitter: { icon: "🐦", color: "bg-blue-400", displayName: "Twitter/X", category: "Social", iconUrl: "https://upload.wikimedia.org/wikipedia/commons/6/6f/Logo_of_Twitter.svg" },
   linkedin: { icon: "💼", color: "bg-blue-700", displayName: "LinkedIn", category: "Professional", iconUrl: "https://upload.wikimedia.org/wikipedia/commons/e/e8/Linkedin-logo-blue-In-square-40px.png" },
+  whatsapp: { icon: "💬", color: "bg-green-500", displayName: "WhatsApp", category: "Social", iconUrl: "https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg" },
 }
 
 interface AppIntegrationCardProps {

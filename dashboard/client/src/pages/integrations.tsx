@@ -65,7 +65,7 @@ const mockIntegrations: AppIntegration[] = [
   {
     id: "int-007",
     name: "notion",
-    type: "extension",
+    type: "api",
     enabled: true,
     settings: { syncPages: true, workspaces: ["personal"] },
     lastSync: new Date("2024-01-14T16:20:00Z"),
@@ -73,9 +73,34 @@ const mockIntegrations: AppIntegration[] = [
   {
     id: "int-008",
     name: "github",
-    type: "extension",
+    type: "api",
     enabled: false,
     settings: {},
+    lastSync: null,
+  },
+  // Newly added AI tool extensions
+  {
+    id: "int-009",
+    name: "claude",
+    type: "extension",
+    enabled: false,
+    settings: { syncConversations: true },
+    lastSync: null,
+  },
+  {
+    id: "int-010",
+    name: "copilot",
+    type: "extension",
+    enabled: false,
+    settings: { syncChats: true },
+    lastSync: null,
+  },
+  {
+    id: "int-011",
+    name: "grok",
+    type: "extension",
+    enabled: false,
+    settings: { syncConversations: true },
     lastSync: null,
   },
 ]

@@ -47,7 +47,6 @@ export function SearchBar({
     { value: "gmail", label: "Gmail" },
     { value: "drive", label: "Google Drive" },
     { value: "teams", label: "Microsoft Teams" },
-    { value: "linear", label: "Linear" },
   ]
   
   const dateRanges = [
