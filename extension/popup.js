@@ -2,94 +2,182 @@ import { authService } from './src/services/auth.service.js';
 
 console.log('[AgenticMem] popup script loaded');
 
-// Initialize the auth service and UI when popup opens
-document.addEventListener('DOMContentLoaded', async () => {
-    await authService.init();
-    await initializeUI();
-});
-
+// Elements
 const statusEl = document.getElementById('status');
 const retrieveBtn = document.getElementById('retrieveMemoriesBtn');
 const loginBtn = document.getElementById('loginBtn');
 const logoutBtn = document.getElementById('logoutBtn');
 const userInfoEl = document.getElementById('userInfo');
-const authActionsEl = document.getElementById('authActions');
 const appActionsEl = document.getElementById('appActions');
+const memoriesListEl = document.getElementById('memoriesList');
+const themeToggleBtn = document.getElementById('themeToggle');
+const themeIcon = document.getElementById('themeIcon');
+const extVersionEl = document.getElementById('extVersion');
+
+// Utilities
+function setStatus(message, type = '') {
+  if (!statusEl) return;
+  statusEl.textContent = message || '';
+  statusEl.classList.remove('error', 'success');
+  if (type) statusEl.classList.add(type);
+}
+
+function setLoading(btn, loading) {
+  if (!btn) return;
+  if (loading) {
+    btn.disabled = true;
+    if (!btn.dataset.originalLabel) {
+      btn.dataset.originalLabel = btn.innerHTML;
+    }
+    btn.innerHTML = `<span class="spinner"></span>` + (btn.dataset.loadingText ? ` ${btn.dataset.loadingText}` : '');
+  } else {
+    btn.disabled = false;
+    if (btn.dataset.originalLabel) {
+      btn.innerHTML = btn.dataset.originalLabel;
+    }
+  }
+}
+
+function renderMemories(memories) {
+  if (!memoriesListEl) return;
+  if (!Array.isArray(memories) || memories.length === 0) {
+    memoriesListEl.classList.add('hidden');
+    memoriesListEl.innerHTML = '';
+    return;
+  }
+  memoriesListEl.classList.remove('hidden');
+  memoriesListEl.innerHTML = '';
+  memories.slice(0, 25).forEach(m => {
+    const li = document.createElement('li');
+    li.textContent = typeof m === 'string' ? m : (m.text || m.content || JSON.stringify(m));
+    memoriesListEl.appendChild(li);
+  });
+}
+
+function initTheme() {
+  try {
+    const stored = localStorage.getItem('agenticmem_theme');
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const theme = stored || (prefersDark ? 'dark' : 'light');
+    document.documentElement.dataset.theme = theme;
+    updateThemeIcon(theme);
+  } catch {}
+}
+
+function toggleTheme() {
+  const current = document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
+  const next = current === 'dark' ? 'light' : 'dark';
+  document.documentElement.dataset.theme = next;
+  try { localStorage.setItem('agenticmem_theme', next); } catch {}
+  updateThemeIcon(next);
+}
+
+function updateThemeIcon(theme) {
+  if (!themeIcon) return;
+  if (theme === 'dark') {
+    themeIcon.innerHTML = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" />';
+  } else {
+    themeIcon.innerHTML = '<circle cx="12" cy="12" r="5"/><path d="M12 1v2"/><path d="M12 21v2"/><path d="M4.22 4.22l1.42 1.42"/><path d="M18.36 18.36l1.42 1.42"/><path d="M1 12h2"/><path d="M21 12h2"/><path d="M4.22 19.78l1.42-1.42"/><path d="M18.36 5.64l1.42-1.42"/>';
+  }
+}
+
+// Initialize when popup opens
+document.addEventListener('DOMContentLoaded', async () => {
+  initTheme();
+  if (extVersionEl) {
+    try { extVersionEl.textContent = chrome.runtime.getManifest().version; } catch {}
+  }
+  try {
+    await authService.init();
+  } catch (e) {
+    console.warn('[AgenticMem][popup] auth init failed', e);
+  }
+  await initializeUI();
+});
 
 // Initialize UI based on auth state
 async function initializeUI() {
-    const isAuthenticated = authService.isAuthenticated();
-    loginBtn.classList.toggle('hidden', isAuthenticated);
-    logoutBtn.classList.toggle('hidden', !isAuthenticated);
-    appActionsEl.classList.toggle('hidden', !isAuthenticated);
-    
-    if (isAuthenticated) {
-        const user = authService.getUser();
-        userInfoEl.textContent = `Signed in as ${user.displayName || user.userPrincipalName}`;
-        userInfoEl.classList.remove('hidden');
-        statusEl.textContent = 'Ready';
-    } else {
-        userInfoEl.classList.add('hidden');
-        statusEl.textContent = 'Please sign in to continue';
-    }
+  const isAuthenticated = authService.isAuthenticated();
+  loginBtn.classList.toggle('hidden', isAuthenticated);
+  logoutBtn.classList.toggle('hidden', !isAuthenticated);
+  appActionsEl.classList.toggle('hidden', !isAuthenticated);
+  if (isAuthenticated) {
+    const user = authService.getUser();
+    userInfoEl.textContent = `Signed in as ${user.displayName || user.userPrincipalName || user.name || 'User'}`;
+    userInfoEl.classList.remove('hidden');
+    setStatus('Ready');
+  } else {
+    userInfoEl.classList.add('hidden');
+    setStatus('Please sign in to continue');
+    renderMemories([]);
+  }
 }
 
 // Handle login
 loginBtn?.addEventListener('click', async () => {
-    try {
-        statusEl.textContent = 'Signing in...';
-        await authService.login();
-        await initializeUI();
-    } catch (error) {
-        console.error('[AgenticMem][popup] Login failed:', error);
-        statusEl.textContent = 'Sign in failed';
-        statusEl.classList.add('error');
-    }
+  setStatus('Signing in...');
+  setLoading(loginBtn, true);
+  try {
+    await authService.login();
+    await initializeUI();
+    setStatus('Signed in', 'success');
+  } catch (error) {
+    console.error('[AgenticMem][popup] Login failed:', error);
+    setStatus('Sign in failed', 'error');
+  } finally {
+    setLoading(loginBtn, false);
+  }
 });
 
 // Handle logout
 logoutBtn?.addEventListener('click', async () => {
-    try {
-        statusEl.textContent = 'Signing out...';
-        await authService.logout();
-        await initializeUI();
-    } catch (error) {
-        console.error('[AgenticMem][popup] Logout failed:', error);
-        statusEl.textContent = 'Sign out failed';
-        statusEl.classList.add('error');
-    }
+  setStatus('Signing out...');
+  setLoading(logoutBtn, true);
+  try {
+    await authService.logout();
+    await initializeUI();
+    setStatus('Signed out', 'success');
+  } catch (error) {
+    console.error('[AgenticMem][popup] Logout failed:', error);
+    setStatus('Sign out failed', 'error');
+  } finally {
+    setLoading(logoutBtn, false);
+  }
+});
+
+// Theme toggle
+themeToggleBtn?.addEventListener('click', () => {
+  toggleTheme();
 });
 
 // Handle retrieve memories
 retrieveBtn?.addEventListener('click', async () => {
-    if (!authService.isAuthenticated()) {
-        statusEl.textContent = 'Please sign in first';
-        statusEl.classList.add('error');
-        return;
+  if (!authService.isAuthenticated()) {
+    setStatus('Please sign in first', 'error');
+    return;
+  }
+  setStatus('Retrieving...');
+  setLoading(retrieveBtn, true);
+  retrieveBtn.dataset.loadingText = 'Retrieving';
+  try {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const activeTab = tabs?.[0];
+    if (!activeTab?.id) {
+      setStatus('No active tab', 'error');
+      return;
     }
-
-    statusEl.textContent = 'Retrieving...';
-    try {
-        const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-        const activeTab = tabs?.[0];
-        
-        if (!activeTab?.id) {
-            statusEl.textContent = 'No active tab';
-            return;
-        }
-
-        const latestMessage = await sendGetCurrentMessages(activeTab.id);
-        if (!latestMessage) {
-            statusEl.textContent = 'No latest messages';
-            return;
-        }
-
-        await retrieveMemories(latestMessage);
-    } catch (e) {
-        statusEl.textContent = 'Error retrieving memories';
-        statusEl.classList.add('error');
-        console.error('[AgenticMem][popup] Exception during retrieve', e);
+    const latestMessage = await sendGetCurrentMessages(activeTab.id);
+    if (!latestMessage) {
+      setStatus('No latest messages', 'error');
+      return;
     }
+    await retrieveMemories(latestMessage);
+  } catch (e) {
+    setStatus(e?.message || 'Error retrieving memories', 'error');
+    console.error('[AgenticMem][popup] Exception during retrieve', e);
+  } finally {
+    setLoading(retrieveBtn, false);
+  }
 });
 
 async function sendGetCurrentMessages(tabId) {
@@ -160,37 +248,32 @@ async function injectContentScript(tabId) {
 
 async function retrieveMemories(queryText, topK = 5) {
   if (!queryText) {
-    statusEl.textContent = 'Empty query';
+    setStatus('Empty query', 'error');
     return;
   }
-
   if (!authService.isAuthenticated()) {
-    statusEl.textContent = 'Please sign in first';
-    statusEl.classList.add('error');
+    setStatus('Please sign in first', 'error');
     return;
   }
-
   try {
-    statusEl.textContent = 'Retrieving memories...';
+    setStatus('Retrieving memories...');
     const params = new URLSearchParams({ q: queryText, top_k: String(topK) });
     const url = `/api/memories/retrieve/?${params.toString()}`;
-    
     const response = await authService.makeAuthenticatedRequest(url, { method: 'GET' });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     console.log('[AgenticMem][popup] Retrieval result', data);
-    statusEl.textContent = Array.isArray(data) ? `Retrieved ${data.length} memories` : 'Retrieved';
-    
-    // Forward memories to content script to inject into conversation UI
+    if (Array.isArray(data)) {
+      setStatus(`Retrieved ${data.length} memories`, 'success');
+      renderMemories(data);
+    } else {
+      setStatus('Retrieved', 'success');
+      renderMemories([]);
+    }
+    // Forward to content script
     const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
     const activeTab = tabs?.[0];
-    if (!activeTab?.id) {
-      throw new Error('No active tab found');
-    }
-
+    if (!activeTab?.id) throw new Error('No active tab found');
     await new Promise((resolve, reject) => {
       chrome.tabs.sendMessage(
         activeTab.id,
@@ -208,7 +291,7 @@ async function retrieveMemories(queryText, topK = 5) {
     });
   } catch (err) {
     console.error('[AgenticMem][popup] Retrieval failed', err);
-    statusEl.textContent = err.message || 'Retrieve error';
-    statusEl.classList.add('error');
+    setStatus(err.message || 'Retrieve error', 'error');
   }
 }
+
