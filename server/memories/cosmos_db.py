@@ -19,6 +19,10 @@ class BaseCosmosDBManager:
     def upsert_item(self, item: dict):
         return self.container.upsert_item(item)     
 
+    def delete_item(self, id: str):
+        """Delete an item by id (using id as partition key)."""
+        return self.container.delete_item(item=id, partition_key=id)
+
 
 class MemoriesDBManager(BaseCosmosDBManager):
     def __init__(self):
