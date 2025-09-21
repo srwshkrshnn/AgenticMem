@@ -24,7 +24,7 @@ const useMemoryStore = create<MemoryState>((set, get) => ({
       const trimmed = q.trim();
       let data: Memory[];
       if (!trimmed) {
-        data = await listMemories(50);
+        data = await listMemories(200);
       } else {
         data = await searchMemories(trimmed);
       }

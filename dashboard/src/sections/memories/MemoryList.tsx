@@ -6,10 +6,14 @@ export default function MemoryList() {
   const { memories, query, fetchMemories, loading } = useMemoryStore();
 
   useEffect(() => {
-    if (query.trim()) {
-      const id = setTimeout(() => fetchMemories(query), 300);
+    const trimmed = query.trim();
+    // Debounced search when user enters text
+    if (trimmed) {
+      const id = setTimeout(() => fetchMemories(trimmed), 300);
       return () => clearTimeout(id);
     }
+    // When no query, load recent memories (list endpoint via store logic)
+    fetchMemories('');
   }, [query, fetchMemories]);
 
   return (
