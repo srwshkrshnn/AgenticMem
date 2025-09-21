@@ -103,6 +103,30 @@ const mockIntegrations: AppIntegration[] = [
     settings: { syncConversations: true },
     lastSync: null,
   },
+  {
+    id: "int-012",
+    name: "twitter",
+    type: "extension",
+    enabled: false,
+    settings: {},
+    lastSync: null,
+  },
+  {
+    id: "int-013",
+    name: "linkedin",
+    type: "extension",
+    enabled: false,
+    settings: {},
+    lastSync: null,
+  },
+  {
+    id: "int-014",
+    name: "whatsapp",
+    type: "extension",
+    enabled: false,
+    settings: {},
+    lastSync: null,
+  },
 ]
 
 export default function Integrations() {
