@@ -1,0 +1,68 @@
+digraph MemoryLayerArchitecture {
+	bgcolor=white dpi=180 fontname=Helvetica fontsize=12 label="Memory Layer Architecture" labelloc=t rankdir=TB
+	node [color="#44546a" fillcolor="#f5f7fa" fontname=Helvetica fontsize=14 margin="0.25,0.15" shape=rect style="rounded,filled"]
+	edge [arrowsize=0.8 color="#555555" fontname=Helvetica fontsize=12]
+	Ingestion [label="Ingestion Layer
+Sources: Agents / Apps / Devices
+• Normalize Data
+• Generate Embeddings
+• Enrich Metadata"]
+	GraphDB [label="Graph DB (Neo4j / Graphiti)
+• Entities & Relationships
+• Workflows / Dependencies
+• Provenance / Permissions"]
+	VectorDB [label="Vector DB (Cosmos DB + Extensions)
+• Multimodal Embeddings
+• Semantic Indexes
+• Fast Context Recall"]
+	Retrieval [label="Hybrid Retrieval & Reasoning
+1. Semantic Search
+2. Graph Traversal
+3. Fusion & Ranking"]
+	Access [label="Access & Control Layer
+• User Ownership
+• Permission Graph
+• Portable Sharing"]
+	Agents [label="AI Agents & Apps
+• Assistants
+• Productivity Tools
+• Chat / LLM Interfaces"]
+	subgraph cluster_memory {
+		bgcolor="#ffffff" fontname=Helvetica fontsize=18 label="Memory Types Mapping" style=dashed
+		Episodic [label="Episodic
+Graph + Vector"]
+		Semantic [label="Semantic
+Vector + Graph"]
+		Procedural [label="Procedural
+Graph + Vector"]
+		Relational [label="Relational
+Graph"]
+		Contextual [label="Contextual
+Vector"]
+		Emotional [label="Emotional
+Vector + Graph"]
+		Spatial [label="Spatial / Temporal
+Graph + Vector"]
+		Meta [label="Meta-Memory
+Graph"]
+	}
+	Ingestion -> GraphDB
+	Ingestion -> VectorDB
+	GraphDB -> Retrieval
+	VectorDB -> Retrieval
+	Retrieval -> Access
+	Access -> Agents
+	GraphDB -> Episodic [style=dotted]
+	VectorDB -> Episodic [style=dotted]
+	VectorDB -> Semantic [style=dotted]
+	GraphDB -> Semantic [style=dotted]
+	GraphDB -> Procedural [style=dotted]
+	VectorDB -> Procedural [style=dotted]
+	GraphDB -> Relational [style=dotted]
+	VectorDB -> Contextual [style=dotted]
+	VectorDB -> Emotional [style=dotted]
+	GraphDB -> Emotional [style=dotted]
+	GraphDB -> Spatial [style=dotted]
+	VectorDB -> Spatial [style=dotted]
+	GraphDB -> Meta [style=dotted]
+}
