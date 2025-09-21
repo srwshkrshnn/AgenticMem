@@ -78,14 +78,6 @@ const mockIntegrations: AppIntegration[] = [
     settings: {},
     lastSync: null,
   },
-  {
-    id: "int-009",
-    name: "linear",
-    type: "extension",
-    enabled: true,
-    settings: { syncIssues: true, syncComments: true },
-    lastSync: new Date("2024-01-15T07:45:00Z"),
-  },
 ]
 
 export default function Integrations() {

@@ -4,35 +4,33 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { format } from "date-fns"
 import { type AppIntegration } from "@shared/schema"
 
-// App configuration with icons and colors
-const appConfigs: Record<string, { icon: string; color: string; displayName: string; category: string }> = {
+// App configuration with icons, colors, and (optionally) direct SVG URLs
+// iconUrl (when present) will be attempted first; AvatarFallback (emoji) serves as graceful fallback
+const appConfigs: Record<string, { icon: string; color: string; displayName: string; category: string; iconUrl?: string }> = {
   // Microsoft Apps (API)
-  outlook: { icon: "📧", color: "bg-blue-500", displayName: "Outlook", category: "Microsoft 365" },
-  onedrive: { icon: "☁️", color: "bg-blue-600", displayName: "OneDrive", category: "Microsoft 365" },
-  teams: { icon: "👥", color: "bg-purple-600", displayName: "Microsoft Teams", category: "Microsoft 365" },
-  sharepoint: { icon: "📊", color: "bg-blue-700", displayName: "SharePoint", category: "Microsoft 365" },
-  calendar: { icon: "📅", color: "bg-blue-500", displayName: "Outlook Calendar", category: "Microsoft 365" },
+  outlook: { icon: "📧", color: "bg-blue-500", displayName: "Outlook", category: "Microsoft 365", iconUrl: "https://upload.wikimedia.org/wikipedia/commons/d/df/Microsoft_Office_Outlook_%282018%E2%80%93present%29.svg" },
+  onedrive: { icon: "☁️", color: "bg-blue-600", displayName: "OneDrive", category: "Microsoft 365", iconUrl: "https://upload.wikimedia.org/wikipedia/commons/3/3c/Microsoft_Office_OneDrive_%282019%E2%80%93present%29.svg" },
+  teams: { icon: "👥", color: "bg-purple-600", displayName: "Microsoft Teams", category: "Microsoft 365", iconUrl: "https://upload.wikimedia.org/wikipedia/commons/c/c9/Microsoft_Office_Teams_%282018%E2%80%93present%29.svg" },
+  sharepoint: { icon: "📊", color: "bg-blue-700", displayName: "SharePoint", category: "Microsoft 365", iconUrl: "https://upload.wikimedia.org/wikipedia/commons/e/e1/Microsoft_Office_SharePoint_%282019%E2%80%93present%29.svg" },
   
   // Google Apps (API)
-  gmail: { icon: "✉️", color: "bg-red-500", displayName: "Gmail", category: "Google Workspace" },
-  drive: { icon: "💾", color: "bg-green-500", displayName: "Google Drive", category: "Google Workspace" },
-  docs: { icon: "📄", color: "bg-blue-500", displayName: "Google Docs", category: "Google Workspace" },
-  sheets: { icon: "📊", color: "bg-green-600", displayName: "Google Sheets", category: "Google Workspace" },
-  gcalendar: { icon: "📅", color: "bg-red-400", displayName: "Google Calendar", category: "Google Workspace" },
+  gmail: { icon: "✉️", color: "bg-red-500", displayName: "Gmail", category: "Google Workspace", iconUrl: "https://upload.wikimedia.org/wikipedia/commons/7/7e/Gmail_icon_%282020%29.svg" },
+  drive: { icon: "💾", color: "bg-green-500", displayName: "Google Drive", category: "Google Workspace", iconUrl: "https://upload.wikimedia.org/wikipedia/commons/1/12/Google_Drive_icon_%282020%29.svg" },
+  docs: { icon: "📄", color: "bg-blue-500", displayName: "Google Docs", category: "Google Workspace", iconUrl: "https://upload.wikimedia.org/wikipedia/commons/6/66/Google_Docs_2020_Logo.svg" },
+  sheets: { icon: "📊", color: "bg-green-600", displayName: "Google Sheets", category: "Google Workspace", iconUrl: "https://upload.wikimedia.org/wikipedia/commons/a/ae/Google_Sheets_2020_Logo.svg" },
+  gcalendar: { icon: "📅", color: "bg-red-400", displayName: "Google Calendar", category: "Google Workspace", iconUrl: "https://upload.wikimedia.org/wikipedia/commons/a/a5/Google_Calendar_icon_%282020%29.svg" },
   
   // Browser Extensions
-  chatgpt: { icon: "🤖", color: "bg-green-700", displayName: "ChatGPT", category: "AI Tools" },
-  claude: { icon: "🧠", color: "bg-orange-500", displayName: "Claude", category: "AI Tools" },
-  notion: { icon: "📝", color: "bg-gray-800", displayName: "Notion", category: "Productivity" },
-  linear: { icon: "📈", color: "bg-purple-500", displayName: "Linear", category: "Project Management" },
-  github: { icon: "🐙", color: "bg-gray-900", displayName: "GitHub", category: "Development" },
-  twitter: { icon: "🐦", color: "bg-blue-400", displayName: "Twitter/X", category: "Social" },
-  linkedin: { icon: "💼", color: "bg-blue-700", displayName: "LinkedIn", category: "Professional" },
-  reddit: { icon: "🔗", color: "bg-orange-600", displayName: "Reddit", category: "Social" },
+  chatgpt: { icon: "🤖", color: "bg-green-700", displayName: "ChatGPT", category: "AI Tools", iconUrl: "https://upload.wikimedia.org/wikipedia/commons/e/ef/ChatGPT-Logo.svg" },
+  claude: { icon: "🧠", color: "bg-orange-500", displayName: "Claude", category: "AI Tools", iconUrl: "https://upload.wikimedia.org/wikipedia/commons/b/b0/Claude_AI_symbol.svg" },
+  notion: { icon: "📝", color: "bg-gray-800", displayName: "Notion", category: "Productivity", iconUrl: "https://upload.wikimedia.org/wikipedia/commons/e/e9/Notion-logo.svg" },
+  github: { icon: "🐙", color: "bg-gray-900", displayName: "GitHub", category: "Development", iconUrl: "https://upload.wikimedia.org/wikipedia/commons/9/95/Font_Awesome_5_brands_github.svg" },
+  twitter: { icon: "🐦", color: "bg-blue-400", displayName: "Twitter/X", category: "Social", iconUrl: "https://upload.wikimedia.org/wikipedia/commons/6/6f/Logo_of_Twitter.svg" },
+  linkedin: { icon: "💼", color: "bg-blue-700", displayName: "LinkedIn", category: "Professional", iconUrl: "https://upload.wikimedia.org/wikipedia/commons/e/e8/Linkedin-logo-blue-In-square-40px.png" },
 }
 
 interface AppIntegrationCardProps {
@@ -78,8 +76,17 @@ export function AppIntegrationCard({ integration, onToggle, onConfigure }: AppIn
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 flex-1">
-            <Avatar className={`h-10 w-10 ${appConfig.color} text-white flex-shrink-0`}>
-              <AvatarFallback className={`${appConfig.color} text-white`}>
+            <Avatar className="h-10 w-10 flex-shrink-0 bg-transparent">
+              {appConfig.iconUrl && (
+                <AvatarImage 
+                  src={appConfig.iconUrl} 
+                  alt={appConfig.displayName}
+                  className="object-contain p-1"
+                  loading="lazy"
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+                />
+              )}
+              <AvatarFallback className="bg-transparent text-foreground">
                 {appConfig.icon}
               </AvatarFallback>
             </Avatar>
