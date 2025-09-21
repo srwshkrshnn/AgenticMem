@@ -1,0 +1,4 @@
+00813fa Remove the add memory page from the application sidebar
+0b613df Add modern dashboard for AI agent memory management
+3c02d17 Set up the foundational UI components and structure for the AI memory dashboard
+b6ffb76 Initial commit
