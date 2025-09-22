@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1200" height="780" viewBox="0 0 1200 780" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" role="img" aria-labelledby="title desc">
+  <title id="title">Pensieve Memory Flow</title>
+  <desc id="desc">Diagram of message extraction, summarization, database interaction, similarity fetch, tool mediated update actions, and final memory outputs.</desc>
+
+  <!-- ================ Definitions ================ -->
+  <defs>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0,0 L12,6 L0,12 L3,6 z" fill="#232323"/>
+    </marker>
+
+    <filter id="shadow-sm" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.18"/>
+    </filter>
+
+    <linearGradient id="gradExtraction" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ede6ff"/>
+      <stop offset="100%" stop-color="#dacfff"/>
+    </linearGradient>
+    <linearGradient id="gradUpdate" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#e9f9e5"/>
+      <stop offset="100%" stop-color="#d2f1ca"/>
+    </linearGradient>
+    <linearGradient id="gradDarkCard" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#525252"/>
+      <stop offset="100%" stop-color="#3e3e3e"/>
+    </linearGradient>
+
+    <!-- Cylinder (DB) -->
+    <g id="cylinder">
+      <ellipse cx="0" cy="-30" rx="60" ry="18" fill="#ffcf5a" stroke="#bf9330" stroke-width="2"/>
+      <rect x="-60" y="-30" width="120" height="74" fill="#ffcf5a" stroke="#bf9330" stroke-width="2"/>
+      <ellipse cx="0" cy="44" rx="60" ry="18" fill="#f8b229" stroke="#bf9330" stroke-width="2"/>
+    </g>
+
+    <!-- Action pill template symbol -->
+    <symbol id="actionPill" viewBox="0 0 120 32">
+      <rect x="1" y="1" width="118" height="30" rx="8" ry="8" fill="var(--fill,#ccc)" stroke="var(--stroke,#888)" stroke-width="2"/>
+      <text x="60" y="21" font-size="14" font-family="Arial" text-anchor="middle" fill="var(--text,#111)" font-weight="600">LABEL</text>
+    </symbol>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="780" fill="#ffffff"/>
+
+  <!-- Optional grid (commented out) -->
+  <!-- <g stroke="#eee" stroke-width="1"> -->
+  <!--   for debugging alignment -->
+  <!-- </g> -->
+
+  <!-- ================ Column Guides (invisible) ================ -->
+  <g id="guides" opacity="0">
+    <rect x="0" y="0" width="1200" height="780" fill="none"/>
+  </g>
+
+  <!-- ================ Messages Source ================ -->
+  <g id="messages" font-family="Arial">
+    <rect x="40" y="110" width="210" height="180" rx="14" ry="14" fill="none" stroke="#9d9d9d" stroke-dasharray="7 7" stroke-width="2"/>
+    <text x="60" y="142" font-size="18" font-weight="700" fill="#222">Messages</text>
+    <rect x="66" y="160" width="160" height="26" rx="6" fill="#a9daf4" stroke="#5aa9d6"/>
+    <rect x="66" y="198" width="160" height="26" rx="6" fill="#c1f3a7" stroke="#7dc366"/>
+    <rect x="66" y="236" width="160" height="26" rx="6" fill="#f8e3a7" stroke="#d2b559"/>
+  </g>
+
+  <!-- Arrow: Messages -> Extraction -->
+  <path d="M250 200 L300 200" stroke="#222" stroke-width="3" fill="none" marker-end="url(#arrow)"/>
+
+  <!-- ================ Extraction Phase ================ -->
+  <g id="extraction">
+    <rect x="300" y="70" width="400" height="360" rx="28" ry="28" fill="url(#gradExtraction)" stroke="#713b87" stroke-width="3" filter="url(#shadow-sm)"/>
+    <text x="330" y="108" font-family="Arial" font-size="22" font-weight="700" fill="#262626">Extraction Phase</text>
+
+    <!-- Summary card -->
+    <g>
+      <rect x="360" y="134" width="280" height="48" rx="10" fill="#7145c7" stroke="#573098" stroke-width="2"/>
+      <text x="500" y="164" font-family="Arial" font-size="16" font-weight="600" text-anchor="middle" fill="#fff">Conversation Summary</text>
+    </g>
+
+    <!-- Last m messages block -->
+    <g>
+      <rect x="360" y="198" width="280" height="56" rx="10" fill="#e3d5f3" stroke="#b79bdc" stroke-width="2"/>
+      <text x="500" y="230" font-family="Arial" font-size="14" text-anchor="middle" fill="#2a2a2a">Last m messages</text>
+    </g>
+
+    <!-- Example messages panel -->
+    <g>
+      <rect x="375" y="270" width="250" height="70" rx="6" fill="#ffffff" stroke="#d1d1d1"/>
+      <rect x="390" y="286" width="150" height="14" rx="6" fill="#a9daf4"/>
+      <rect x="390" y="308" width="110" height="14" rx="6" fill="#c1f3a7"/>
+    </g>
+
+    <text x="330" y="380" font-family="Arial" font-size="14" font-style="italic" fill="#444">LLM</text>
+  </g>
+
+  <!-- Arrow: Extraction -> Summary Generator -->
+  <path d="M610 120 L690 60" stroke="#222" stroke-width="2.4" fill="none" marker-end="url(#arrow)"/>
+
+  <!-- ================ Summary Generator ================ -->
+  <g id="summaryGen">
+    <rect x="690" y="10" width="190" height="80" rx="16" fill="url(#gradDarkCard)" stroke="#262626" stroke-width="2" filter="url(#shadow-sm)"/>
+    <text x="785" y="58" text-anchor="middle" font-family="Arial" font-size="15" fill="#fff" font-weight="600">Summary Generator</text>
+  </g>
+
+  <!-- Arrows: Summary Generator -> DB & back (fetch summary & past) -->
+  <path d="M830 90 L830 150" stroke="#222" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+  <path d="M850 150 L850 100 L830 100" stroke="#222" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+  <text x="860" y="120" font-size="12" font-family="Arial" fill="#333">fetch / store summary</text>
+
+  <!-- ================ Database ================ -->
+  <g id="database" transform="translate(830,180)">
+    <use xlink:href="#cylinder"/>
+    <text x="0" y="78" font-family="Arial" font-size="15" text-anchor="middle" fill="#222" font-weight="600">Database</text>
+  </g>
+
+  <!-- Arrow: Database -> Update Phase (similar memories) -->
+  <path d="M890 224 L1040 224" stroke="#222" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+  <text x="965" y="214" font-size="12" font-family="Arial" text-anchor="middle" fill="#333" font-style="italic">fetch similar memories</text>
+
+  <!-- Arrow: Extraction -> New Extracted Memories (down) -->
+  <path d="M500 430 L500 500" stroke="#222" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+
+  <!-- ================ New Extracted Memories (intermediate) ================ -->
+  <g id="newExtracted">
+    <rect x="400" y="500" width="200" height="80" rx="20" fill="url(#gradDarkCard)" stroke="#222" stroke-width="2" filter="url(#shadow-sm)"/>
+    <text x="500" y="540" font-family="Arial" font-size="15" fill="#fff" text-anchor="middle">New Extracted</text>
+    <text x="500" y="560" font-family="Arial" font-size="15" fill="#fff" text-anchor="middle">Memories</text>
+  </g>
+
+  <!-- Arrow: New Extracted Memories -> Tool Call (angled) -->
+  <path d="M600 540 L760 540 L900 430" stroke="#222" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+
+  <!-- ================ Update Phase ================ -->
+  <g id="updatePhase">
+    <rect x="1040" y="140" width="140" height="380" rx="26" fill="url(#gradUpdate)" stroke="#1d7f37" stroke-width="3" filter="url(#shadow-sm)"/>
+    <text x="1110" y="170" font-family="Arial" font-size="18" text-anchor="middle" font-weight="700" fill="#214021">Update Phase</text>
+
+    <!-- Similar memories card (input) -->
+    <g>
+      <rect x="1060" y="190" width="100" height="60" rx="10" fill="#4e4e4e" stroke="#262626"/>
+      <text x="1110" y="218" font-size="12" font-family="Arial" fill="#fff" text-anchor="middle">Top 's'</text>
+      <text x="1110" y="236" font-size="12" font-family="Arial" fill="#fff" text-anchor="middle">similar</text>
+    </g>
+
+    <!-- Tool Call -->
+    <g transform="translate(1110,300)">
+      <ellipse cx="0" cy="0" rx="62" ry="46" fill="#fff" stroke="#222" stroke-width="2"/>
+      <text x="0" y="-4" font-family="Arial" font-size="14" fill="#222" text-anchor="middle">Tool</text>
+      <text x="0" y="16" font-family="Arial" font-size="14" fill="#222" text-anchor="middle">Call</text>
+      <g transform="translate(-18,-26) scale(0.9)">
+        <path d="M4 18 C0 12, 12 4, 20 6 L28 14 L24 18 L16 10 C8 12, 12 20, 4 18 Z" fill="#f2c94c" stroke="#c98f18" stroke-width="1"/>
+        <path d="M36 24 L54 42" stroke="#8c8c8c" stroke-width="4" stroke-linecap="round"/>
+      </g>
+    </g>
+
+    <!-- Actions list -->
+    <g font-family="Arial" font-size="13" font-weight="600">
+      <rect x="1060" y="360" width="100" height="32" rx="8" fill="#bfeaae" stroke="#6da96a"/>
+      <text x="1110" y="382" text-anchor="middle" fill="#0b4f12">ADD</text>
+      <rect x="1060" y="398" width="100" height="32" rx="8" fill="#bfe0ff" stroke="#5a9fd1"/>
+      <text x="1110" y="420" text-anchor="middle" fill="#0b4f12">UPDATE</text>
+      <rect x="1060" y="436" width="100" height="32" rx="8" fill="#fcc2c2" stroke="#d86464"/>
+      <text x="1110" y="458" text-anchor="middle" fill="#701515">DELETE</text>
+      <rect x="1060" y="474" width="100" height="32" rx="8" fill=" #ead3f2" stroke="#b28bb8"/>
+      <text x="1110" y="496" text-anchor="middle" fill="#5a235a">NOOP</text>
+    </g>
+  </g>
+
+  <!-- Arrow: Similar memories -> Tool Call -->
+  <path d="M1060 220 L1000 220 L1000 300 L1048 300" stroke="#222" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+  <text x="1002" y="260" font-size="12" font-family="Arial" fill="#333" text-anchor="middle">context</text>
+
+  <!-- Arrow: Tool Call -> Actions -->
+  <path d="M1110 346 L1110 360" stroke="#222" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+
+  <!-- New memories output -->
+  <g id="newMemories">
+    <rect x="1030" y="530" width="160" height="70" rx="16" fill="url(#gradDarkCard)" stroke="#222" stroke-width="2" filter="url(#shadow-sm)"/>
+    <text x="1110" y="570" font-family="Arial" font-size="16" fill="#fff" text-anchor="middle">New Memories</text>
+  </g>
+
+  <!-- Arrow: Actions -> New Memories -->
+  <path d="M1110 506 L1110 530" stroke="#222" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+
+  <!-- Arrow: Update Phase -> Database (update) -->
+  <path d="M1040 300 L970 300 L970 230" stroke="#222" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+  <text x="1000" y="292" font-size="12" font-family="Arial" fill="#333" text-anchor="middle">apply updates</text>
+
+  <!-- Branding -->
+  <g id="branding">
+    <text x="950" y="750" font-family="Arial" font-size="30" font-weight="800" fill="#111">Pensieve</text>
+    <circle cx="900" cy="745" r="12" fill="none" stroke="#111" stroke-width="2"/>
+    <circle cx="906" cy="745" r="4" fill="#111"/>
+  </g>
+
+  <!-- Legend (optional) -->
+  <g id="legend" font-family="Arial" font-size="11">
+    <rect x="40" y="20" width="250" height="54" rx="10" fill="#f7f7f7" stroke="#d4d4d4"/>
+    <text x="54" y="40" font-weight="600" fill="#222">Flow Legend:</text>
+    <text x="54" y="56" fill="#444">Arrows indicate data / control transitions.</text>
+  </g>
+
+</svg>
