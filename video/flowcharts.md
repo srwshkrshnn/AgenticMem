@@ -88,7 +88,8 @@ flowchart LR
         SEARCH[Vector Similarity Search on identifiednodes]
         MERGE[Entity/Relationship Merging]
         CONFLICT[Conflict Resolution]
-        SEARCH --> MERGE --> CONFLICT
+        TEMPORAL[Temporal Conflict Resolution]
+        SEARCH --> MERGE --> CONFLICT --> TEMPORAL
     end
 
     subgraph NEO4J[Neo4j Graph Database]
@@ -100,7 +101,7 @@ flowchart LR
     end
 
     NEO4J -->|fetch similar entities/relationships| SEARCH
-    CONFLICT --> FINAL[Final Graph Operations]
+    TEMPORAL --> FINAL[Final Graph Operations]
     
     FINAL --> NEO4J_OPS
 
@@ -120,6 +121,7 @@ flowchart LR
     classDef phase2 fill:#e6f5e6,stroke:#4a7a42,stroke-width:1px;
     classDef neo4j fill:#87ceeb,stroke:#4682b4,stroke-width:2px;
     classDef operations fill:#ffd700,stroke:#daa520,stroke-width:1px;
+    classDef temporal fill:#dda0dd,stroke:#8b008b,stroke-width:2px;
     classDef createOp fill:#90ee90,stroke:#228b22,color:#000;
     classDef updateOp fill:#87cefa,stroke:#4169e1,color:#000;
     classDef deleteOp fill:#ffa07a,stroke:#ff4500,color:#000;
@@ -134,9 +136,12 @@ flowchart LR
 ```
 
 Graphiti-Neo4j Legend:
-- Events are processed by Graphiti's extraction phase to identify entities, relationships, and facts
+
+- Events are processed by Graphiti's extraction phase to identify entities, relationships, facts, and temporal context
+- Temporal resolution ensures proper time-based ordering and conflict detection
 - Vector similarity search finds existing similar entities and relationships in Neo4j
-- Graphiti's merging engine resolves conflicts and determines optimal graph structure
+- Graphiti's merging engine resolves conflicts and determines optimal graph structure with temporal awareness
+- Temporal conflict resolution handles time-based inconsistencies and updates
 - Final operations are executed as Cypher queries against the Neo4j graph database
 - Neo4j stores entities as nodes, relationships as edges, and maintains vector embeddings for similarity search
 
