@@ -112,6 +112,7 @@ flowchart LR
         UPDATE_REL[UPDATE Relationship]
         DELETE_NODE[DELETE Node]
         INVALIDATE_REL[INVALIDATE Relationship]
+        CREATE_NODE~~~UPDATE_NODE~~~CREATE_REL~~~UPDATE_REL~~~DELETE_NODE~~~INVALIDATE_REL
     end
 
     NEO4J_OPS --> NEO4J
