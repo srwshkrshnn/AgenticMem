@@ -5,7 +5,8 @@
 5. Semantic and Contextual memories are stored in the Cosmos DB vector database for fast recall. Based on recent context, existing memories can be updated, deleted or added to the vector index.
 6. For episodic or procedural memories, a knowledge graph, maintained using Graphiti and Neo4j, is incrementally updated. Each node is an entity and edges represent relationships. As newer context arrives, the graph is accordingly updated to reflect new information.
 7. When needed, memories are extracted using vector search and nearest neighbor techniques to find relevant prior context.
-8. This approach offers several advantages compared to trational methods. Retrieval is faster, cost is lower and recall is higher.
+8. This approach offers several advantages compared to traditional methods. Retrieval is faster, cost is lower and recall is higher.
 9. These memories can then be surfaced at relevant places to provide richer, more personalized AI experiences.
 10. All of this happens with complete user ownership and control. In the dashboard you can view, edit, delete memories, and toggle or revoke any source — ingestion stops instantly. Delete a memory and it’s truly gone: purged from the vector index and the graph, not just hidden.
-11. Pensieve: Unified Memory. Truly Yours.
+11. Over time, platforms won’t need their own siloed memories — they can simply plug into yours.
+12. Pensieve: Unified Memory. Truly Yours.
