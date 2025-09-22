@@ -7,5 +7,6 @@ urlpatterns = [
     path('retrieve/', views.retrieve_memories, name='retrieve_memories'),
     path('list/', views.list_memories, name='list_memories'),
     path('<str:memory_id>/', views.memory_detail, name='memory_detail'),
+    path('retrieve-answer/', views.retrieve_answer, name='retrieve_answer'),
     path("process-memory/", views.process_memory,name='process-memory'), 
 ]

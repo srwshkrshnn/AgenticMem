@@ -349,6 +349,85 @@ def memory_detail(request, memory_id: str):
 
     return JsonResponse({"error": "Method not allowed"}, status=405)
 
+@api_view(['GET'])
+def retrieve_answer(request):
+    """Generate mock answers based on question content.
+    
+    Query params:
+        q: required text question to answer.
+    """
+    try:
+        query_text = request.query_params.get('q')
+        if not query_text:
+            return JsonResponse({"error": "Missing required query parameter 'q'"}, status=400)
+        
+        print(f"[retrieve_answer] Question: '{query_text[:100]}'")
+        
+        query_lower = query_text.lower()
+        
+        # Mock responses based on question content
+        if "project deadline" in query_lower:
+            response = {
+                "answer": "Based on our previous discussions, the project deadline is set for March 15, 2026. This gives us approximately 6 months to complete all deliverables including development, testing, and deployment phases.",
+                "sources": [
+                    {
+                        "id": "mock-deadline-1",
+                        "content": "Project timeline discussion - deadline confirmed for Q1 2026",
+                        "similarity": 0.92,
+                        "created_at": "2025-09-20T10:30:00Z"
+                    },
+                    {
+                        "id": "mock-deadline-2", 
+                        "content": "Meeting notes: All stakeholders agreed on March 15, 2026 as final delivery date",
+                        "similarity": 0.88,
+                        "created_at": "2025-09-19T14:15:00Z"
+                    }
+                ],
+                "confidence": "high",
+                "memory_count": 2
+            }
+        elif "favorite restaurant" in query_lower:
+            response = {
+                "answer": "From our conversations about dining preferences, the top recommended restaurants include The French Laundry (Napa Valley) for fine dining, Eleven Madison Park (NYC) for innovative cuisine, Le Bernardin (NYC) for exceptional seafood, and Alinea (Chicago) for molecular gastronomy. For more casual but high-quality options, we've discussed Shake Shack, In-N-Out, and Joe's Pizza as excellent choices.",
+                "sources": [
+                    {
+                        "id": "mock-restaurant-1",
+                        "content": "Discussion about fine dining experiences - mentioned The French Laundry and Le Bernardin as must-visit places",
+                        "similarity": 0.89,
+                        "created_at": "2025-09-18T19:45:00Z"
+                    },
+                    {
+                        "id": "mock-restaurant-2",
+                        "content": "Food recommendations: Eleven Madison Park has incredible tasting menu, Alinea is worth the trip to Chicago",
+                        "similarity": 0.86,
+                        "created_at": "2025-09-17T12:20:00Z"
+                    },
+                    {
+                        "id": "mock-restaurant-3",
+                        "content": "Casual dining chat - Shake Shack vs In-N-Out debate, agreed both are great for different reasons",
+                        "similarity": 0.75,
+                        "created_at": "2025-09-16T16:30:00Z"
+                    }
+                ],
+                "confidence": "high",
+                "memory_count": 3
+            }
+        else:
+            # Default response for other questions
+            response = {
+                "answer": "I don't have specific information about that topic in my current memory. Could you provide more context or ask about something more specific like project deadlines or restaurant recommendations?",
+                "sources": [],
+                "confidence": "low",
+                "memory_count": 0
+            }
+        
+        print(f"[retrieve_answer] Generated mock response for query type")
+        return JsonResponse(response)
+            
+    except Exception as e:
+        print(f"[retrieve_answer] Exception: {e}")
+        return JsonResponse({"error": str(e)}, status=500)
+
 def generate_conversation_id(user_id: str) -> str:
     return f"{user_id}-conv-{uuid.uuid4().hex[:8]}"
 
