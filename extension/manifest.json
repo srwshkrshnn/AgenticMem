@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
-  "name": "AgenticMem",
-  "description": "AgenticMem Chrome Extension (boilerplate).",
+  "name": "Pensieve",
+  "description": "Pensieve Chrome Extension.",
   "version": "0.0.7",
   "action": {
-    "default_title": "AgenticMem",
+    "default_title": "Pensieve",
     "default_popup": "popup.html"
   },
   "background": {

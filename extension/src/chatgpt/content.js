@@ -1,4 +1,4 @@
-console.log('[AgenticMem] Content script loaded', new Date().toISOString());
+console.log('[Pensieve] Content script loaded', new Date().toISOString());
 
 // Handle PING messages to verify content script is loaded
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -56,7 +56,7 @@ function updateDraft() {
 function captureStoredDraft() {
   if (!currentDraft) return '';
   const captured = currentDraft;
-  console.log('[AgenticMem] Captured message:', captured);
+  console.log('[Pensieve] Captured message:', captured);
   currentDraft = '';
   return captured;
 }
@@ -103,7 +103,7 @@ function getLastAssistantMessage() {
   const last = assistants[assistants.length - 1];
   const contentEl = last.querySelector(ASSISTANT_CONTENT_SELECTOR);
   const text = (contentEl?.textContent || '').trim();
-  if (text) console.log('[AgenticMem] Last assistant message:', text);
+  if (text) console.log('[Pensieve] Last assistant message:', text);
   return text;
 }
 
@@ -161,17 +161,17 @@ async function sendProcessMemory(draft, lastAssistant) {
     const userId = await fetchUserIdStrict();
     const conversationId = getConversationId();
     const payload = { message, userId, conversationId };
-    console.log('[AgenticMem] Sending process-memory payload', payload);
+    console.log('[Pensieve] Sending process-memory payload', payload);
     fetch(PROCESS_MEMORY_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     })
       .then(r => r.json().catch(() => ({})))
-      .then(data => { console.log('[AgenticMem] process-memory result', data); })
-      .catch(err => { console.warn('[AgenticMem] process-memory request failed', err); });
+      .then(data => { console.log('[Pensieve] process-memory result', data); })
+      .catch(err => { console.warn('[Pensieve] process-memory request failed', err); });
   } catch (e) {
-    console.warn('[AgenticMem] Aborting sendProcessMemory:', e.message);
+    console.warn('[Pensieve] Aborting sendProcessMemory:', e.message);
   }
 }
 
@@ -278,12 +278,12 @@ try {
         textarea.dispatchEvent(new Event('input', { bubbles: true }));
         sendResponse?.({ ok: true, appended: memories.length });
       } catch (e) {
-        console.warn('[AgenticMem] Failed to update textarea with memories', e);
+        console.warn('[Pensieve] Failed to update textarea with memories', e);
         sendResponse?.({ ok: false, error: String(e) });
       }
       return true;
     }
   });
 } catch (e) {
-  console.warn('[AgenticMem] Could not register message listener', e);
+  console.warn('[Pensieve] Could not register message listener', e);
 }

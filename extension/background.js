@@ -1,11 +1,11 @@
-// background service worker for AgenticMem
+// background service worker for Pensieve
 // Runs in MV3 service worker context
-console.log('[AgenticMem] background service worker loaded');
+console.log('[Pensieve] background service worker loaded');
 
 import { authService } from './src/services/auth.service.js';
 
 chrome.runtime.onInstalled.addListener(details => {
-  console.log('[AgenticMem] onInstalled', details);
+  console.log('[Pensieve] onInstalled', details);
 });
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {

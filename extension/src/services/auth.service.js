@@ -31,7 +31,7 @@ class AuthService {
             const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
             return payload;
         } catch (e) {
-            console.warn('[AgenticMem][auth] Failed to decode id_token', e);
+            console.warn('[Pensieve][auth] Failed to decode id_token', e);
             return null;
         }
     }
@@ -44,7 +44,7 @@ class AuthService {
             const auth = await chrome.storage.local.get(['accessToken', 'idToken', 'user', 'expiresAt', 'claims', 'primaryUserId']);
             if (auth.accessToken && auth.idToken && auth.user && auth.expiresAt && auth.primaryUserId) {
             if (Date.now() >= auth.expiresAt) {
-                console.log('[AgenticMem][auth] Token expired, clearing auth data');
+                console.log('[Pensieve][auth] Token expired, clearing auth data');
                 await this.logout();
                 return;
             }
@@ -55,7 +55,7 @@ class AuthService {
             this.expiresAt = auth.expiresAt;
             this.claims = auth.claims || null;
             this.primaryUserId = auth.primaryUserId;
-            console.log('[AgenticMem][auth] Restored auth state:', {
+            console.log('[Pensieve][auth] Restored auth state:', {
                 accessToken: this.accessToken.substring(0, 10) + '...',
                 idToken: this.idToken.substring(0, 10) + '...',
                 userId: this.primaryUserId,
@@ -69,7 +69,7 @@ class AuthService {
     async login() {
         try {
             const redirectUri = chrome.identity.getRedirectURL();
-            console.log('[AgenticMem][auth] Redirect URI:', redirectUri);
+            console.log('[Pensieve][auth] Redirect URI:', redirectUri);
             const state = this._generateNonce();
 
             const authParams = new URLSearchParams({
@@ -83,7 +83,7 @@ class AuthService {
             });
 
             const authUrl = `${AUTH_CONFIG.authority}/authorize?${authParams.toString()}`;
-            console.log('[AgenticMem][auth] Auth URL:', authUrl);
+            console.log('[Pensieve][auth] Auth URL:', authUrl);
 
             const responseUrl = await chrome.identity.launchWebAuthFlow({
                 url: authUrl,
@@ -91,7 +91,7 @@ class AuthService {
             });
             if (!responseUrl) throw new Error('No response from auth flow');
 
-            console.log('[AgenticMem][auth] Response URL:', responseUrl.substring(0, 100) + '...');
+            console.log('[Pensieve][auth] Response URL:', responseUrl.substring(0, 100) + '...');
             const fragment = new URL(responseUrl).hash.substring(1);
             const hashParams = new URLSearchParams(fragment);
 
@@ -145,7 +145,7 @@ class AuthService {
                 claims: this.claims,
                 primaryUserId: this.primaryUserId
             });
-            console.log('[AgenticMem][auth] Login success userId=', this.primaryUserId);
+            console.log('[Pensieve][auth] Login success userId=', this.primaryUserId);
             return true;
         } catch (error) {
             console.error('Login error:', error);

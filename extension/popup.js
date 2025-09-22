@@ -1,6 +1,6 @@
 import { authService } from './src/services/auth.service.js';
 
-console.log('[AgenticMem] popup script loaded');
+console.log('[Pensieve] popup script loaded');
 
 // Elements
 const statusEl = document.getElementById('status');
@@ -56,7 +56,7 @@ function renderMemories(memories) {
 
 function initTheme() {
   try {
-    const stored = localStorage.getItem('agenticmem_theme');
+    const stored = localStorage.getItem('pensieve_theme');
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     const theme = stored || (prefersDark ? 'dark' : 'light');
     document.documentElement.dataset.theme = theme;
@@ -68,7 +68,7 @@ function toggleTheme() {
   const current = document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
   const next = current === 'dark' ? 'light' : 'dark';
   document.documentElement.dataset.theme = next;
-  try { localStorage.setItem('agenticmem_theme', next); } catch {}
+  try { localStorage.setItem('pensieve_theme', next); } catch {}
   updateThemeIcon(next);
 }
 
@@ -90,7 +90,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   try {
     await authService.init();
   } catch (e) {
-    console.warn('[AgenticMem][popup] auth init failed', e);
+    console.warn('[Pensieve][popup] auth init failed', e);
   }
   await initializeUI();
 });
@@ -122,7 +122,7 @@ loginBtn?.addEventListener('click', async () => {
     await initializeUI();
     setStatus('Signed in', 'success');
   } catch (error) {
-    console.error('[AgenticMem][popup] Login failed:', error);
+    console.error('[Pensieve][popup] Login failed:', error);
     setStatus('Sign in failed', 'error');
   } finally {
     setLoading(loginBtn, false);
@@ -138,7 +138,7 @@ logoutBtn?.addEventListener('click', async () => {
     await initializeUI();
     setStatus('Signed out', 'success');
   } catch (error) {
-    console.error('[AgenticMem][popup] Logout failed:', error);
+    console.error('[Pensieve][popup] Logout failed:', error);
     setStatus('Sign out failed', 'error');
   } finally {
     setLoading(logoutBtn, false);
@@ -174,14 +174,14 @@ retrieveBtn?.addEventListener('click', async () => {
     await retrieveMemories(latestMessage);
   } catch (e) {
     setStatus(e?.message || 'Error retrieving memories', 'error');
-    console.error('[AgenticMem][popup] Exception during retrieve', e);
+    console.error('[Pensieve][popup] Exception during retrieve', e);
   } finally {
     setLoading(retrieveBtn, false);
   }
 });
 
 async function sendGetCurrentMessages(tabId) {
-  console.log('[AgenticMem][popup] Checking content script status for tab', tabId);
+  console.log('[Pensieve][popup] Checking content script status for tab', tabId);
   
   // First, verify we're on a supported page
   const tab = await chrome.tabs.get(tabId);
@@ -193,14 +193,14 @@ async function sendGetCurrentMessages(tabId) {
   try {
     await pingContentScript(tabId);
   } catch (error) {
-    console.log('[AgenticMem][popup] Content script not responsive, attempting to inject');
+    console.log('[Pensieve][popup] Content script not responsive, attempting to inject');
     await injectContentScript(tabId);
     // Wait a moment for the script to initialize
     await new Promise(resolve => setTimeout(resolve, 500));
   }
 
   return new Promise((resolve, reject) => {
-    console.log('[AgenticMem][popup] Sending GET_CURRENT_MESSAGES to tab', tabId);
+    console.log('[Pensieve][popup] Sending GET_CURRENT_MESSAGES to tab', tabId);
     
     const timeoutId = setTimeout(() => {
       reject(new Error('Request timed out'));
@@ -210,11 +210,11 @@ async function sendGetCurrentMessages(tabId) {
       clearTimeout(timeoutId);
       
       if (chrome.runtime.lastError) {
-        console.warn('[AgenticMem][popup] sendMessage error', chrome.runtime.lastError);
+        console.warn('[Pensieve][popup] sendMessage error', chrome.runtime.lastError);
         return reject(new Error('Failed to communicate with ChatGPT page'));
       }
 
-      console.log('[AgenticMem] get current messages response', response);
+      console.log('[Pensieve] get current messages response', response);
       if (!response?.ok) return resolve('');
       const latest = (response.latestMessages || '').trim();
       resolve(latest);
@@ -239,9 +239,9 @@ async function injectContentScript(tabId) {
       target: { tabId },
       files: ['src/chatgpt/content.js']
     });
-    console.log('[AgenticMem][popup] Content script injected successfully');
+    console.log('[Pensieve][popup] Content script injected successfully');
   } catch (error) {
-    console.error('[AgenticMem][popup] Failed to inject content script:', error);
+    console.error('[Pensieve][popup] Failed to inject content script:', error);
     throw new Error('Failed to initialize extension on this page');
   }
 }
@@ -262,7 +262,7 @@ async function retrieveMemories(queryText, topK = 5) {
     const response = await authService.makeAuthenticatedRequest(url, { method: 'GET' });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
-    console.log('[AgenticMem][popup] Retrieval result', data);
+    console.log('[Pensieve][popup] Retrieval result', data);
     if (Array.isArray(data)) {
       setStatus(`Retrieved ${data.length} memories`, 'success');
       renderMemories(data);
@@ -280,17 +280,17 @@ async function retrieveMemories(queryText, topK = 5) {
         { type: 'APPEND_MEMORIES', memories: data, ts: Date.now() },
         response => {
           if (chrome.runtime.lastError) {
-            console.warn('[AgenticMem][popup] Could not send APPEND_MEMORIES', chrome.runtime.lastError);
+            console.warn('[Pensieve][popup] Could not send APPEND_MEMORIES', chrome.runtime.lastError);
             reject(chrome.runtime.lastError);
             return;
           }
-          console.log('[AgenticMem][popup] APPEND_MEMORIES ack', response);
+          console.log('[Pensieve][popup] APPEND_MEMORIES ack', response);
           resolve(response);
         }
       );
     });
   } catch (err) {
-    console.error('[AgenticMem][popup] Retrieval failed', err);
+    console.error('[Pensieve][popup] Retrieval failed', err);
     setStatus(err.message || 'Retrieve error', 'error');
   }
 }

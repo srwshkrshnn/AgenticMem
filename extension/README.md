@@ -1,4 +1,4 @@
-# AgenticMem Chrome Extension (Boilerplate)
+# Pensieve Chrome Extension (Boilerplate)
 
 Minimal Manifest V3 boilerplate.
 

@@ -48,7 +48,7 @@ export function AppSidebar({ memoryCount = 0, activeIntegrations = 0 }: AppSideb
           </div>
           <div className="flex flex-col">
             <h1 className="text-sm font-semibold" data-testid="text-app-title">
-              AI Memory
+              Pensieve
             </h1>
             <p className="text-xs text-muted-foreground">
               Cross-platform memory layer
