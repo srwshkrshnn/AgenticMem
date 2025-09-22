@@ -142,6 +142,12 @@ COSMOS_SUMMARIES_CONTAINER = os.getenv("COSMOS_SUMMARIES_CONTAINER", "summaries"
 # Memory search configuration
 MEMORY_SEARCH_TOP_K_DEFAULT = int(os.getenv('MEMORY_SEARCH_TOP_K_DEFAULT', '5'))
 
+# Demo mode configuration
+# When enabled, certain endpoints return static demo data instead of performing
+# live vector searches (see retrieve_memories view). Useful for demos without
+# embedding costs or a fully provisioned vector index.
+DEMO_MODE = os.getenv('DEMO_MODE', '0') in ['1', 'true', 'True', 'YES', 'yes']
+
 # Azure OpenAI Configuration
 AZURE_OPENAI_ENDPOINT = os.getenv('AZURE_OPENAI_ENDPOINT')
 # Normalize to avoid accidental double slashes when composing URLs

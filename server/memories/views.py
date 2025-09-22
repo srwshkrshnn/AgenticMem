@@ -218,6 +218,31 @@ def retrieve_memories(request):
             return JsonResponse({"error": "Missing required query parameter 'q'"}, status=400)
         print(f"[retrieve_memories] Query param q='{query_text[:100]}'")
 
+        # Demo mode shortcut: return fixed curated memories without vector search
+        if getattr(settings, 'DEMO_MODE', False):
+            print("[retrieve_memories] DEMO_MODE active: returning static demo memories (no vector search)")
+            static_memories = [
+                "User is highly allergic to peanuts",
+                "User lives in Bengaluru, Karnataka",
+                "User enjoys hiking, live jazz, and reading science fiction",
+                "User prefers Mediterranean and Japanese cuisine, with a focus on seasonal veggie-forward dishes.",
+                "User does not like cheese",
+            ]
+            # Shape each item similar to cosmos item structure expected downstream
+            response = [
+                {
+                    'id': f'demo-{i+1}',
+                    'content': txt,
+                    'created_at': datetime.utcnow().isoformat(),
+                    'updated_at': datetime.utcnow().isoformat(),
+                    'similarity': 1.0 - (i * 0.05)  # descending fake similarity scores
+                }
+                for i, txt in enumerate(static_memories)
+            ]
+            # Return full static set without relevance filtering (per request)
+            print(f"[retrieve_memories] DEMO_MODE returning {len(response)} static memories (no relevance filter)")
+            return JsonResponse(response, safe=False)
+
         embedding = azure_openai.generate_embeddings(query_text)
         if embedding is None:
             print("[retrieve_memories] Failed to generate embedding")
@@ -230,14 +255,12 @@ def retrieve_memories(request):
                 top_k = int(top_k_param)
             except ValueError:
                 return JsonResponse({"error": "Invalid 'top_k' parameter"}, status=400)
-                
         similar = memories_db.search_similar_memories(embedding, top_k=top_k)
         print(f"[retrieve_memories] Retrieved {len(similar)} similar memories before LLM relevance filter")
         response = [
             {**mem.to_cosmos_item(), 'similarity': score}
             for mem, score in similar
         ]
-        # Apply LLM-based relevance filtering (returns only useful memories or [] on low relevance)
         response = filter_relevant_memories(query_text, response)
         print(f"[retrieve_memories] Returning {len(response)} memories after relevance filter")
         return JsonResponse(response, safe=False)

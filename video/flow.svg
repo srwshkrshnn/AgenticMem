@@ -62,8 +62,8 @@
     <rect x="66" y="236" width="160" height="26" rx="6" fill="#f8e3a7" stroke="#d2b559"/>
   </g>
 
-  <!-- Arrow: Messages -> Extraction -->
-  <path d="M250 200 L300 200" stroke="#222" stroke-width="3" fill="none" marker-end="url(#arrow)"/>
+  <!-- Arrow: Messages -> Extraction (thicker primary flow) -->
+  <path d="M250 200 L300 200" stroke="#222" stroke-width="3.2" fill="none" marker-end="url(#arrow)"/>
 
   <!-- ================ Extraction Phase ================ -->
   <g id="extraction">
@@ -92,8 +92,8 @@
     <text x="330" y="380" font-family="Arial" font-size="14" font-style="italic" fill="#444">LLM</text>
   </g>
 
-  <!-- Arrow: Extraction -> Summary Generator -->
-  <path d="M610 120 L690 60" stroke="#222" stroke-width="2.4" fill="none" marker-end="url(#arrow)"/>
+  <!-- Arrow: Extraction -> Summary Generator (orthogonal elbow) -->
+  <path d="M610 120 L650 120 L650 50 L690 50" stroke="#222" stroke-width="2.4" fill="none" marker-end="url(#arrow)"/>
 
   <!-- ================ Summary Generator ================ -->
   <g id="summaryGen">
@@ -101,10 +101,13 @@
     <text x="785" y="58" text-anchor="middle" font-family="Arial" font-size="15" fill="#fff" font-weight="600">Summary Generator</text>
   </g>
 
-  <!-- Arrows: Summary Generator -> DB & back (fetch summary & past) -->
+  <!-- Arrows: Summary Generator <-> DB (two separate labeled flows) -->
+  <!-- Down: store summary -->
   <path d="M830 90 L830 150" stroke="#222" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
-  <path d="M850 150 L850 100 L830 100" stroke="#222" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
-  <text x="860" y="120" font-size="12" font-family="Arial" fill="#333">fetch / store summary</text>
+  <!-- Up: fetch past summary -->
+  <path d="M842 150 L842 102 L830 102" stroke="#555" stroke-width="1.8" fill="none" marker-end="url(#arrow)"/>
+  <text x="855" y="128" font-size="11" font-family="Arial" fill="#333">store summary</text>
+  <text x="865" y="108" font-size="11" font-family="Arial" fill="#555">fetch prior</text>
 
   <!-- ================ Database ================ -->
   <g id="database" transform="translate(830,180)">
@@ -113,11 +116,11 @@
   </g>
 
   <!-- Arrow: Database -> Update Phase (similar memories) -->
-  <path d="M890 224 L1040 224" stroke="#222" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
-  <text x="965" y="214" font-size="12" font-family="Arial" text-anchor="middle" fill="#333" font-style="italic">fetch similar memories</text>
+  <path d="M890 224 L1030 224 L1030 205 L1040 205" stroke="#222" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+  <text x="960" y="214" font-size="11" font-family="Arial" text-anchor="middle" fill="#333" font-style="italic">fetch similar</text>
 
-  <!-- Arrow: Extraction -> New Extracted Memories (down) -->
-  <path d="M500 430 L500 500" stroke="#222" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+  <!-- Arrow: Extraction -> New Extracted Memories (down, centered) -->
+  <path d="M500 430 L500 492" stroke="#222" stroke-width="2.2" fill="none" marker-end="url(#arrow)"/>
 
   <!-- ================ New Extracted Memories (intermediate) ================ -->
   <g id="newExtracted">
@@ -126,8 +129,8 @@
     <text x="500" y="560" font-family="Arial" font-size="15" fill="#fff" text-anchor="middle">Memories</text>
   </g>
 
-  <!-- Arrow: New Extracted Memories -> Tool Call (angled) -->
-  <path d="M600 540 L760 540 L900 430" stroke="#222" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+  <!-- Arrow: New Extracted Memories -> Tool Call (multi-segment orthogonal) -->
+  <path d="M600 540 L720 540 L720 430 L900 430" stroke="#222" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
 
   <!-- ================ Update Phase ================ -->
   <g id="updatePhase">
@@ -165,12 +168,12 @@
     </g>
   </g>
 
-  <!-- Arrow: Similar memories -> Tool Call -->
-  <path d="M1060 220 L1000 220 L1000 300 L1048 300" stroke="#222" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
-  <text x="1002" y="260" font-size="12" font-family="Arial" fill="#333" text-anchor="middle">context</text>
+  <!-- Arrow: Similar memories -> Tool Call (pull inward then down) -->
+  <path d="M1060 220 L1010 220 L1010 300 L1048 300" stroke="#222" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+  <text x="1012" y="260" font-size="11" font-family="Arial" fill="#333" text-anchor="middle">similar set</text>
 
   <!-- Arrow: Tool Call -> Actions -->
-  <path d="M1110 346 L1110 360" stroke="#222" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+  <path d="M1110 346 L1110 352" stroke="#222" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
 
   <!-- New memories output -->
   <g id="newMemories">
@@ -178,12 +181,12 @@
     <text x="1110" y="570" font-family="Arial" font-size="16" fill="#fff" text-anchor="middle">New Memories</text>
   </g>
 
-  <!-- Arrow: Actions -> New Memories -->
-  <path d="M1110 506 L1110 530" stroke="#222" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+  <!-- Arrow: Actions -> New Memories (shorter for alignment) -->
+  <path d="M1110 506 L1110 524" stroke="#222" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
 
-  <!-- Arrow: Update Phase -> Database (update) -->
-  <path d="M1040 300 L970 300 L970 230" stroke="#222" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
-  <text x="1000" y="292" font-size="12" font-family="Arial" fill="#333" text-anchor="middle">apply updates</text>
+  <!-- Arrow: Update Phase -> Database (apply updates path refined) -->
+  <path d="M1040 300 L960 300 L960 248 L890 248" stroke="#222" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+  <text x="960" y="288" font-size="11" font-family="Arial" fill="#333" text-anchor="middle">apply updates</text>
 
   <!-- Branding -->
   <g id="branding">
