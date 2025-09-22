@@ -1,26 +1,25 @@
-## Memory Extraction & Update Flow (Left-to-Right)
+# Memory Extraction & Update Flow with CosmosDB
 
 ```mermaid
 flowchart LR
-    subgraph MSG[Messages]
-        U[User Msgs] -->|conversation| AIAgent[Assistant Msgs]
-    end
+    MSG[New events or information]
 
     MSG --> EP
 
     subgraph EP[Extraction Phase - LLM]
-        direction TB
         SUM[Conversation Summary]
-        LM[Last m messages]
+        LM[Last m events]
         CURR[Current Turn]
-        SUM --> LM --> CURR
+        SUM ~~~ LM ~~~ CURR
     end
 
     SUMGEN[Summary Generator]
 
-    EP -->|extracted candidate memories| CAND[New extracted memories]
-    SUMGEN -->|provides summary| EP
-    SUMGEN -->|fetch summary & past messages| DB[(Database)]
+    EP -->|extracted candidate<br/>memories| CAND[New extracted memories]
+    SUMGEN -->|update summary & past events| SUMDB[(Summary Database)]
+    EP --> SUMGEN
+
+    SUMDB -->|Summaries and last m events| EP
 
     CAND --> UP
 
@@ -33,14 +32,12 @@ flowchart LR
         TOOL --> NOOP[NOOP]
     end
 
-    DB -->|fetch similar memories| TOPS
-    ADDADD --> NEW[New memories]
-    UPD --> NEW
-    DEL --> NEW
-    NOOP --> NEW
+    MEMDB[(Memory Database)] -->|fetch similar memories| TOPS
+    ADDADD --> MEMDB
+    UPD --> MEMDB
+    DEL --> MEMDB
+    NOOP --> MEMDB
 
-    NEW -->|update memories| DB
-    CAND -.-> SUMGEN
 
     classDef store fill:#f9e79f,stroke:#c39c0a,stroke-width:1px;
     classDef phase1 fill:#e8e3f6,stroke:#6c55a3,stroke-width:1px;
@@ -50,7 +47,7 @@ flowchart LR
     classDef actionDel fill:#c84d3c,stroke:#7a1f14,color:#fff;
     classDef actionNoop fill:#d8bfd8,stroke:#6a3e6a,color:#fff;
 
-    class DB store;
+    class MEMDB,SUMDB store;
     class EP phase1;
     class UP phase2;
     class ADDADD actionAdd;
@@ -60,9 +57,9 @@ flowchart LR
 ```
 
 Legend:
-- Messages enter the Extraction Phase combining prior summary, last m messages, and current turn.
-- Summary Generator retrieves existing summary & past messages from the database and can refresh the summary provided to the Extraction Phase.
+- Events enter the Extraction Phase combining prior summary, last m events, and current turn.
+- Summary Generator retrieves existing summary & past events from the Summary Database and can refresh the summary provided to the Extraction Phase.
 - Extraction Phase emits candidate (new extracted) memories.
-- Update Phase pulls top similar memories from the database, decides per candidate whether to ADD, UPDATE, DELETE, or NOOP, producing new memory states.
-- Database is then updated with resulting memory operations.
+- Update Phase pulls top similar memories from the Memory Database, decides per candidate whether to ADD, UPDATE, DELETE, or NOOP, producing new memory states.
+- Memory Database is then updated with resulting memory operations.
 
