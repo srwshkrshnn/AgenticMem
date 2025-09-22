@@ -3,9 +3,19 @@
   "name": "Pensieve",
   "description": "Pensieve Chrome Extension.",
   "version": "0.0.7",
+  "icons": {
+    "16": "icons/Pensieve16.png",
+    "32": "icons/Pensieve32.png",
+    "48": "icons/Pensieve48.png",
+    "128": "icons/Pensieve128.png"
+  },
   "action": {
     "default_title": "Pensieve",
-    "default_popup": "popup.html"
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/Pensieve16.png",
+      "32": "icons/Pensieve32.png"
+    }
   },
   "background": {
     "service_worker": "background.js",
