@@ -85,7 +85,7 @@ flowchart LR
 
     subgraph UP[Update Phase - Graphiti Engine]
         direction TB
-        SEARCH[Vector Similarity Search on identifiednodes]
+        SEARCH[Vector Similarity Search on identified nodes]
         MERGE[Entity/Relationship Merging]
         CONFLICT[Conflict Resolution]
         TEMPORAL[Temporal Conflict Resolution]
@@ -121,7 +121,6 @@ flowchart LR
     classDef phase2 fill:#e6f5e6,stroke:#4a7a42,stroke-width:1px;
     classDef neo4j fill:#87ceeb,stroke:#4682b4,stroke-width:2px;
     classDef operations fill:#ffd700,stroke:#daa520,stroke-width:1px;
-    classDef temporal fill:#dda0dd,stroke:#8b008b,stroke-width:2px;
     classDef createOp fill:#90ee90,stroke:#228b22,color:#000;
     classDef updateOp fill:#87cefa,stroke:#4169e1,color:#000;
     classDef deleteOp fill:#ffa07a,stroke:#ff4500,color:#000;
@@ -191,7 +190,7 @@ flowchart LR
     VSEARCH --> MEMDB
     FILTER --> EXTRACT
     
-    FUSE --> RES[Extracted memories]
+    FUSE --> RES[Extracted Memories]
     
     RES --> MERGE[Memory Merge]
     EXTRACT --> MERGE
